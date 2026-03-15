@@ -12,6 +12,7 @@ Specs for the generalized `lobsterbazaar` engine and its deploy model.
 - [Agent Bootstrap Skill V0](./specs/2026-03-15-agent-bootstrap-skill-v0.md)
 - [API Contracts V0](./specs/2026-03-15-api-contracts-v0.md)
 - [Lobster Brew Draft Skill](./lobsterbrew.com/skill.md)
+- [V0 Build Plan](./plans/2026-03-15-feat-lobsterbazaar-v0-directory-mcp-handoff-plan.md)
 
 ## Reading order
 
@@ -22,3 +23,4 @@ Specs for the generalized `lobsterbazaar` engine and its deploy model.
 5. Buyer claw request flow
 6. Agent bootstrap skill
 7. API contracts
+8. V0 build plan

@@ -1,0 +1,4 @@
+slug,display_name,store_url,store_domain,storefront_mcp_url,country_codes,locations_summary,notes,tags,claim_contact,claim_status,vertical_metadata
+sample-roaster,Sample Roaster,https://sample-roaster.com,sample-roaster.myshopify.com,,US|CA,3 cafes,"Specialty merchant used for local development and directory previews.","coffee|sample",hello@sample-roaster.com,claimed,"{""category"":""roaster"",""featured"":true}"
+plain-roaster,Plain Roaster,https://plain-roaster.com,,,US,1 cafe,"Second merchant used to verify deterministic offers-first ordering.","coffee",hello@plain-roaster.com,unclaimed,"{""category"":""roaster""}"
+

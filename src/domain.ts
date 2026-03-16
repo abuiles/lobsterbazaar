@@ -147,3 +147,20 @@ export interface DeployConfig {
   deployDomain: string;
   verticalSummary: string;
 }
+
+export interface DeployFileConfig extends DeployConfig {
+  verticalId: string;
+  verticalName: string;
+  brandDescription: string;
+  defaultCountries: string[];
+  publicDirectory: boolean;
+  offersEnabled: boolean;
+  claimMode: "operator_managed";
+}
+
+export interface DeployPackage {
+  config: DeployFileConfig;
+  merchants: Merchant[];
+  claims: MerchantClaim[];
+  offers: Offer[];
+}

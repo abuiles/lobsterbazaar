@@ -188,8 +188,13 @@ export class MemoryRepositories implements Repositories {
   }
 
   async putOffer(input: CreateOfferInput): Promise<void> {
-    if (!this.merchants.has(input.merchantSlug)) {
+    const merchant = this.merchants.get(input.merchantSlug);
+    if (!merchant) {
       throw notFound("Merchant not found");
+    }
+
+    if (merchant.claimStatus !== "claimed" || !this.hasOperatorManagedAccess(input.merchantSlug)) {
+      throw conflict("Only claimed merchants can publish offers");
     }
 
     const now = new Date().toISOString();

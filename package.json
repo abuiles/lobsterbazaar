@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "merge:lobsterbrew:merchants": "node --import tsx/esm scripts/merge-lobsterbrew-merchants.ts",
     "build:deploy:artifacts": "node --import tsx/esm scripts/materialize-deploy.ts",
     "build:deploy:sql": "node --import tsx/esm scripts/build-deploy-sql.ts",
     "check": "npm run typecheck && npm run test",

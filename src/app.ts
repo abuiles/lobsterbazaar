@@ -71,13 +71,13 @@ export function createApp(dependencies: AppDependencies) {
           const countryCodes = await dependencies.repositories.listCountryCodes();
           return wantsMarkdown
             ? text(
-                renderCountriesIndexMarkdown(countryCodes),
-                { headers: { "content-type": "text/markdown; charset=utf-8" } }
-              )
+              renderCountriesIndexMarkdown(countryCodes),
+              { headers: { "content-type": "text/markdown; charset=utf-8" } }
+            )
             : json({
-                generated_at: dependencies.now(),
-                countries: countryCodes
-              });
+              generated_at: dependencies.now(),
+              countries: countryCodes
+            });
         }
 
         const countryMatch = normalizedPath.match(/^\/countries\/([A-Za-z]{2,3})$/);
@@ -641,7 +641,7 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
           <li>request a walkthrough / waitlist / demo</li>
           <li>i'm a merchant and want help going agentic, including setting up my own claw to interact with my customers</li>
           <li><a href="https://github.com/abuiles/lobsterbazaar">source code on GitHub</a></li>
-          <li>made for claws, shoppers, and merchants*</li>
+          <li>made for claws, shoppers, and merchants</li>
           <li>built by <a href="https://x.com/abuiles">@abuiles</a></li>
           <li>powered by <a href="https://lobsterbazaar.com/">lobsterbazaar.com</a></li>
         </ul>

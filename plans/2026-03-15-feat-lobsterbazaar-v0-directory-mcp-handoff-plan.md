@@ -242,6 +242,12 @@ Deliverables:
 - generated `skill.md` exposed publicly
 - `visuals.html` or equivalent review surface if retained
 - one example deploy package
+- deploy-branded install surface details
+  - copyable install instruction
+  - optional mascot
+  - optional emoji
+  - contact card
+  - light/dark theme toggle
 
 Files likely involved:
 
@@ -256,11 +262,14 @@ Acceptance gate:
   - fetch a country listing
   - fetch offers
   - resolve a merchant MCP endpoint
+- a human can:
+  - find the deploy landing page
+  - copy the install instruction
+  - understand how to contact the operator
 
 Deferred in this phase:
 
 - optional owner X-share loop after checkout handoff
-- non-essential presentation polish beyond a minimal landing page and generated `skill.md`
 
 ### Phase 5: Operator Workflows
 
@@ -418,7 +427,28 @@ erDiagram
 - Cloudflare Worker runtime
 - `D1` for mutable control plane state
 - `R2` for generated public artifacts
-- one example deploy package
+
+## Later Follow-Up
+
+These are intentionally deferred now that the core buyer loop is working:
+
+- operator ergonomics for applying private deploys with one command
+  - build deploy SQL
+  - load local or remote `D1`
+  - rematerialize public artifacts
+- deploy validation tooling
+  - config shape validation
+  - merchant URL checks
+  - lightweight warnings for non-Shopify merchants
+- tighter operator docs for first real deploy rollout
+  - private deploy workflow
+  - local import workflow
+  - remote import workflow
+  - smoke-check commands
+- deploy-package parity for brand presentation fields beyond runtime env
+  - mascot URL
+  - contact metadata
+  - richer landing-page copy
 
 ### Risks
 
@@ -431,8 +461,7 @@ erDiagram
 
 The following ideas are valid but should not block the first implementation:
 
-- owner-side X share prompt after cart handoff
-- richer public proof and growth loops
+- richer public proof and growth loops beyond the basic install/contact surface
 - personalized ranking inside the service
 - merchant-to-merchant or lobster-to-lobster negotiation
 - storing buyer preferences or purchase history in the service

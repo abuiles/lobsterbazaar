@@ -333,8 +333,15 @@ export class D1Repositories implements Repositories {
     }));
   }
 
-  async listMerchantArtifacts(now: string): Promise<MerchantArtifact[]> {
-    const merchantsResult = await this.db.prepare(`SELECT * FROM merchants ORDER BY slug ASC`).all<MerchantRow>();
+  async listMerchantArtifacts(now: string, since?: string): Promise<MerchantArtifact[]> {
+    const merchantsQuery = since
+      ? `SELECT * FROM merchants WHERE created_at > ? ORDER BY slug ASC`
+      : `SELECT * FROM merchants ORDER BY slug ASC`;
+
+    const merchantsResult = since
+      ? await this.db.prepare(merchantsQuery).bind(since).all<MerchantRow>()
+      : await this.db.prepare(merchantsQuery).all<MerchantRow>();
+
     const merchants = merchantsResult.results ?? [];
 
     return Promise.all(
@@ -366,20 +373,52 @@ export class D1Repositories implements Repositories {
     return (result.results ?? []).map((row) => row.country_code);
   }
 
-  async listMerchantSlugs(): Promise<string[]> {
-    const result = await this.db
-      .prepare(`SELECT slug FROM merchants ORDER BY slug ASC`)
-      .all<{ slug: string }>();
+  async listMerchantSlugs(since?: string): Promise<string[]> {
+    const query = since
+      ? `SELECT slug FROM merchants WHERE created_at > ? ORDER BY slug ASC`
+      : `SELECT slug FROM merchants ORDER BY slug ASC`;
+
+    const result = since
+      ? await this.db.prepare(query).bind(since).all<{ slug: string }>()
+      : await this.db.prepare(query).all<{ slug: string }>();
 
     return (result.results ?? []).map((row) => row.slug);
   }
 
-  async listOfferIds(): Promise<string[]> {
-    const result = await this.db
-      .prepare(`SELECT offer_id FROM offers ORDER BY offer_id ASC`)
-      .all<{ offer_id: string }>();
+  async listOfferIds(since?: string): Promise<string[]> {
+    const query = since
+      ? `SELECT offer_id FROM offers WHERE created_at > ? ORDER BY offer_id ASC`
+      : `SELECT offer_id FROM offers ORDER BY offer_id ASC`;
+
+    const result = since
+      ? await this.db.prepare(query).bind(since).all<{ offer_id: string }>()
+      : await this.db.prepare(query).all<{ offer_id: string }>();
 
     return (result.results ?? []).map((row) => row.offer_id);
+  }
+
+  async listOfferMerchantSlugsForAddedSince(since: string): Promise<string[]> {
+    const result = await this.db
+      .prepare(`SELECT DISTINCT merchant_slug FROM offers WHERE created_at > ? ORDER BY merchant_slug ASC`)
+      .bind(since)
+      .all<{ merchant_slug: string }>();
+
+    return (result.results ?? []).map((row) => row.merchant_slug);
+  }
+
+  async listOfferCountryCodesForAddedSince(since: string): Promise<string[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT DISTINCT oc.country_code
+         FROM offers o
+         JOIN offer_countries oc ON oc.offer_id = o.offer_id
+         WHERE o.created_at > ?
+         ORDER BY oc.country_code ASC`
+      )
+      .bind(since)
+      .all<{ country_code: string }>();
+
+    return (result.results ?? []).map((row) => row.country_code);
   }
 
   async listClaimIds(): Promise<string[]> {

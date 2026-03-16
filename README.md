@@ -1,14 +1,14 @@
-# LobsterBazaar
+# Lobster Bazaar
 
-![LobsterBazaar mascot](./public/assets/mascots/lobsterbazaar-default.jpg)
+<img src="./public/assets/mascots/lobsterbazaar-default.jpg" alt="LobsterBazaar mascot" width="420">
 
-`lobsterbazaar` is a lightweight Cloudflare Worker engine for agent-facing merchant discovery, Storefront MCP handoff, and checkout-boundary cart orchestration.
+Lobster Bazaar is a lightweight engine for agent-facing merchant discovery, Storefront MCP handoff, and checkout-boundary cart orchestration.
 
-It is the reusable marketplace layer behind deploys like Lobster Brew. A buyer-side agent can use it to discover merchants, inspect active offers, resolve the right merchant MCP endpoint, build a cart, and hand checkout back to the human owner.
+It is the reusable marketplace layer behind deploys like [Lobster Brew](https://lobsterbrew.com/). A buyer-side agent can use it to discover merchants, inspect active offers, resolve the right merchant MCP endpoint, build a cart, and hand checkout back to the human owner.
 
 ## What it does
 
-`lobsterbazaar` owns the directory and routing layer, not the merchant catalog itself.
+Lobster Bazaar owns the directory and routing layer, not the merchant catalog itself.
 
 - Publishes an agent-readable `skill.md` install surface
 - Registers buyer and merchant claws
@@ -174,6 +174,13 @@ Then materialize the public artifacts into the bound R2 bucket:
 
 ```bash
 curl -X POST http://127.0.0.1:8787/internal/materialize \
+  -H "Authorization: Bearer replace-me"
+```
+
+To process only records added after a timestamp:
+
+```bash
+curl -X POST "http://127.0.0.1:8787/internal/materialize?since=2026-03-15T00:00:00Z" \
   -H "Authorization: Bearer replace-me"
 ```
 

@@ -102,19 +102,69 @@ export async function materializePublicArtifacts(
   artifacts: ArtifactStore,
   repositories: Repositories,
   now: string,
-  templateInput: SkillTemplateInput
+  templateInput: SkillTemplateInput,
+  options: {
+    since?: string;
+  } = {}
 ): Promise<void> {
-  const [countryCodes, merchants] = await Promise.all([
-    repositories.listCountryCodes(),
-    repositories.listMerchantArtifacts(now)
+  const { since } = options;
+
+  if (!since) {
+    const [countryCodes, merchantArtifacts] = await Promise.all([
+      repositories.listCountryCodes(),
+      repositories.listMerchantArtifacts(now)
+    ]);
+
+    await Promise.all([
+      ...countryCodes.flatMap((countryCode) => [
+        buildCountryArtifact(repositories, countryCode, now).then((artifact) => artifacts.putCountry(artifact)),
+        buildOffersArtifact(repositories, countryCode, now).then((artifact) => artifacts.putOffers(artifact))
+      ]),
+      ...merchantArtifacts.map((merchant) => artifacts.putMerchant(merchant)),
+      artifacts.putSkill(renderSkillTemplate(templateInput))
+    ]);
+
+    return;
+  }
+
+  const [newMerchantArtifacts, allMerchantArtifacts, offerCountryCodes, merchantSlugsFromOffers] = await Promise.all([
+    repositories.listMerchantArtifacts(now, since),
+    repositories.listMerchantArtifacts(now),
+    repositories.listOfferCountryCodesForAddedSince(since),
+    repositories.listOfferMerchantSlugsForAddedSince(since)
   ]);
 
+  const touchedMerchantSlugs = new Set<string>([
+    ...newMerchantArtifacts.map((merchant) => merchant.slug),
+    ...merchantSlugsFromOffers
+  ]);
+  const touchedCountries = new Set<string>();
+  for (const merchant of newMerchantArtifacts) {
+    for (const countryCode of merchant.countryCodes) {
+      touchedCountries.add(countryCode);
+    }
+  }
+
+  for (const countryCode of offerCountryCodes) {
+    touchedCountries.add(countryCode);
+  }
+
+  const merchantsToMaterialize = allMerchantArtifacts.filter((merchant) => touchedMerchantSlugs.has(merchant.slug));
+  const countryCodesToMaterialize = touchedCountries.size > 0
+    ? Array.from(touchedCountries).sort()
+    : [];
+
+  if (countryCodesToMaterialize.length === 0 && merchantsToMaterialize.length === 0) {
+    await artifacts.putSkill(renderSkillTemplate(templateInput));
+    return;
+  }
+
   await Promise.all([
-    ...countryCodes.flatMap((countryCode) => [
+    ...countryCodesToMaterialize.map((countryCode) => [
       buildCountryArtifact(repositories, countryCode, now).then((artifact) => artifacts.putCountry(artifact)),
       buildOffersArtifact(repositories, countryCode, now).then((artifact) => artifacts.putOffers(artifact))
-    ]),
-    ...merchants.map((merchant) => artifacts.putMerchant(merchant)),
+    ]).flat(),
+    ...merchantsToMaterialize.map((merchant) => artifacts.putMerchant(merchant)),
     artifacts.putSkill(renderSkillTemplate(templateInput))
   ]);
 }

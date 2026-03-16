@@ -225,6 +225,9 @@ export function createApp(dependencies: AppDependencies) {
             throw notFound("Route not found");
           }
 
+          const sinceRaw = url.searchParams.get("since");
+          const since = parseSince(sinceRaw);
+
           await materializePublicArtifacts(
             dependencies.artifacts,
             dependencies.repositories,
@@ -238,7 +241,8 @@ export function createApp(dependencies: AppDependencies) {
               countriesPath: "/countries",
               offersPath: "/offers",
               merchantConnectPath: "/merchants/{slug}/connect"
-            }
+            },
+            { since }
           );
 
           return json({ ok: true });
@@ -259,6 +263,19 @@ function renderCountriesIndexMarkdown(countryCodes: string[]): string {
   }
 
   return `${header}\n\n${countryCodes.map((code) => `- ${code}`).join("\n")}`;
+}
+
+function parseSince(since: string | null): string | undefined {
+  if (!since) {
+    return undefined;
+  }
+
+  const parsed = new Date(since);
+  if (Number.isNaN(parsed.getTime())) {
+    throw badRequest("`since` must be an ISO timestamp");
+  }
+
+  return parsed.toISOString();
 }
 
 function renderCountryMarkdown(artifact: {

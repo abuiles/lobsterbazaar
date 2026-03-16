@@ -186,10 +186,15 @@ export class MemoryRepositories implements Repositories {
       }));
   }
 
-  async listMerchantArtifacts(now: string): Promise<MerchantArtifact[]> {
+  async listMerchantArtifacts(now: string, since?: string): Promise<MerchantArtifact[]> {
+    const merchants = Array.from(this.merchants.values());
+    const sourceMerchants = since
+      ? merchants.filter((merchant) => merchant.createdAt > since)
+      : merchants;
+
     const activeCounts = await this.listActiveOfferCounts(undefined, now);
 
-    return Array.from(this.merchants.values()).map((merchant) => ({
+    return sourceMerchants.map((merchant) => ({
       slug: merchant.slug,
       displayName: merchant.displayName,
       storeUrl: merchant.storeUrl,
@@ -207,16 +212,39 @@ export class MemoryRepositories implements Repositories {
     ).sort();
   }
 
-  async listMerchantSlugs(): Promise<string[]> {
-    return Array.from(this.merchants.keys()).sort();
+  async listMerchantSlugs(since?: string): Promise<string[]> {
+    const merchants = Array.from(this.merchants.values());
+    const filteredMerchants = since ? merchants.filter((merchant) => merchant.createdAt > since) : merchants;
+
+    return filteredMerchants.map((merchant) => merchant.slug).sort();
   }
 
-  async listOfferIds(): Promise<string[]> {
-    return Array.from(this.offers.keys()).sort();
+  async listOfferIds(since?: string): Promise<string[]> {
+    const offers = Array.from(this.offers.values());
+    const filteredOffers = since ? offers.filter((offer) => offer.createdAt > since) : offers;
+
+    return filteredOffers.map((offer) => offer.offerId).sort();
   }
 
   async listClaimIds(): Promise<string[]> {
     return Array.from(this.claims.keys()).sort();
+  }
+
+  async listOfferMerchantSlugsForAddedSince(since: string): Promise<string[]> {
+    const offerSlugs = Array.from(this.offers.values())
+      .filter((offer) => offer.createdAt > since)
+      .map((offer) => offer.merchantSlug)
+      .sort();
+
+    return Array.from(new Set(offerSlugs));
+  }
+
+  async listOfferCountryCodesForAddedSince(since: string): Promise<string[]> {
+    const countryCodes = Array.from(this.offers.values())
+      .filter((offer) => offer.createdAt > since)
+      .flatMap((offer) => offer.countryCodes);
+
+    return Array.from(new Set(countryCodes)).sort();
   }
 
   async putMerchant(input: CreateMerchantInput): Promise<void> {

@@ -225,7 +225,7 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("Read https://lobsterbrew.test/skill.md and follow the instructions to join Lobster Bazaar");
     expect(body).toContain("Let it register and save its key");
     expect(body).toContain("toggle theme");
-    expect(body).toContain("hello@lobsterbazaar.com");
+    expect(body).toContain("hello@lobsterbrew.com");
     expect(body).toContain("source code on GitHub");
     expect(body).toContain("powered by");
     expect(body).toContain('/assets/mascots/lobsterbazaar-default.jpg');
@@ -412,5 +412,108 @@ describe("lobsterbazaar worker", () => {
       "offer_fresh",
       "offer_active"
     ]);
+  });
+
+  it("supports incremental materialize from a since timestamp", async () => {
+    const { app, artifacts, repositories } = await createTestHarness();
+
+    const firstResponse = await app.fetch(
+      new Request("https://lobsterbrew.test/internal/materialize", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-operator-token"
+        }
+      })
+    );
+
+    expect(firstResponse.status).toBe(200);
+    expect((await artifacts.getCountry("US"))?.merchants.map((merchant) => merchant.slug)).toEqual([
+      "claimed-roaster",
+      "sample-roaster"
+    ]);
+
+    await repositories.putMerchant({
+      slug: "fresh-roaster",
+      displayName: "Fresh Roaster",
+      storeUrl: "https://fresh-roaster.com",
+      storeDomain: "fresh-roaster.myshopify.com",
+      storefrontMcpUrl: undefined,
+      countryCodes: ["US"],
+      locationsSummary: "2 cafes",
+      notes: "Freshly imported for incremental materialization coverage.",
+      tags: ["coffee"],
+      claimContact: "hello@fresh-roaster.com",
+      claimStatus: "claimed",
+      verticalMetadata: {},
+      createdAt: "2026-03-16T12:00:00Z",
+      updatedAt: "2026-03-16T12:00:00Z"
+    });
+
+    await repositories.putClaim({
+      claimId: "claim_fresh_roaster",
+      merchantSlug: "fresh-roaster",
+      status: "claimed",
+      contact: "hello@fresh-roaster.com",
+      note: "Operator approved access.",
+      createdAt: "2026-03-16T12:00:00Z",
+      updatedAt: "2026-03-16T12:00:00Z"
+    });
+
+    await repositories.putOffer({
+      offerId: "offer_fresh",
+      merchantSlug: "fresh-roaster",
+      title: "Free shipping",
+      summary: "Free shipping on two bags or more.",
+      countryCodes: ["US"],
+      activeFrom: "2026-03-10T00:00:00Z",
+      validThrough: "2026-04-10T00:00:00Z",
+      offerType: "free_shipping",
+      termsText: "Applies to domestic orders only.",
+      priority: 75,
+      publicProofUrl: undefined,
+      offerCode: undefined,
+      status: "active",
+      verticalMetadata: {},
+      createdAt: "2026-03-16T12:00:00Z",
+      updatedAt: "2026-03-16T12:00:00Z"
+    });
+
+    const secondResponse = await app.fetch(
+      new Request("https://lobsterbrew.test/internal/materialize?since=2026-03-15T23:59:59Z", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-operator-token"
+        }
+      })
+    );
+
+    expect(secondResponse.status).toBe(200);
+    expect((await artifacts.getCountry("US"))?.merchants.map((merchant) => merchant.slug)).toEqual([
+      "claimed-roaster",
+      "fresh-roaster",
+      "sample-roaster"
+    ]);
+    expect((await artifacts.getOffers("US"))?.offers.map((offer) => offer.offerId)).toEqual([
+      "offer_fresh",
+      "offer_active"
+    ]);
+  });
+
+  it("returns 400 when since is invalid", async () => {
+    const { app } = await createTestHarness();
+
+    const response = await app.fetch(
+      new Request("https://lobsterbrew.test/internal/materialize?since=not-a-date", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-operator-token"
+        }
+      })
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: { code: string; message: string } };
+    expect(body.error.message).toContain("`since` must be an ISO timestamp");
+    expect(body.error.code).toBe("bad_request");
   });
 });

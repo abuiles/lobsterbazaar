@@ -45,11 +45,13 @@ export interface Repositories {
   listCountryMerchants(countryCode: string, now: string): Promise<CountryMerchantSummary[]>;
   listActiveOffers(countryCode: string, now: string): Promise<PublicOffer[]>;
   listActiveOffersForMerchant(merchantSlug: string, now: string): Promise<PublicOffer[]>;
-  listMerchantArtifacts(now: string): Promise<MerchantArtifact[]>;
+  listMerchantArtifacts(now: string, since?: string): Promise<MerchantArtifact[]>;
   listCountryCodes(): Promise<string[]>;
-  listMerchantSlugs(): Promise<string[]>;
-  listOfferIds(): Promise<string[]>;
+  listMerchantSlugs(since?: string): Promise<string[]>;
+  listOfferIds(since?: string): Promise<string[]>;
   listClaimIds(): Promise<string[]>;
+  listOfferMerchantSlugsForAddedSince(since: string): Promise<string[]>;
+  listOfferCountryCodesForAddedSince(since: string): Promise<string[]>;
   putMerchant(input: CreateMerchantInput): Promise<void>;
   putOffer(input: CreateOfferInput): Promise<void>;
   putClaim(input: CreateClaimInput): Promise<void>;

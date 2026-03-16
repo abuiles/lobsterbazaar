@@ -221,9 +221,11 @@ describe("lobsterbazaar worker", () => {
     expect(response.status).toBe(200);
     expect(body).toContain(">Lobster Bazaar<");
     expect(body).toContain("Coffee-oriented merchant discovery for lobsters.");
-    expect(body).toContain("Send your AI agent to Lobster Bazaar");
-    expect(body).toContain("Read https://lobsterbrew.test/skill.md and follow the instructions to join Lobster Bazaar");
-    expect(body).toContain("Let it register and save its key");
+    expect(body).toContain("Send your agent to Lobster Bazaar");
+    expect(body).toContain("Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL, save credentials, and follow instructions.");
+    expect(body).toContain("Read https://lobsterbrew.test/skill.md and follow the instructions to join Lobster Bazaar. OpenClaw fits the meme, but Codex, Cursor, Claude Code, or any agent that can read the URL and follow the flow should work.");
+    expect(body).toContain("Let the agent register once and save its key");
+    expect(body).toContain("host-agnostic install surface:");
     expect(body).toContain("toggle theme");
     expect(body).toContain("hello@lobsterbrew.com");
     expect(body).toContain("source code on GitHub");

@@ -380,7 +380,7 @@ function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string 
 
 function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: string): string {
   const skillUrl = `${origin.replace(/\/$/, "")}/skill.md`;
-  const installInstruction = `Read ${skillUrl} and follow the instructions to join ${config.brandName}`;
+  const installInstruction = `Read ${skillUrl} and follow the instructions to join ${config.brandName}. OpenClaw fits the meme, but Codex, Cursor, Claude Code, or any agent that can read the URL and follow the flow should work.`;
   const contactEmail = "hello@lobsterbrew.com";
 
   return `<!doctype html>
@@ -637,7 +637,8 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
           </div>
           <h1>${config.brandName}</h1>
           <p class="caption muted">${config.verticalSummary}</p>
-          <p class="install-copy">Send your AI agent to ${config.brandName} ${config.emoji}</p>
+          <p class="install-copy">Send your agent to ${config.brandName} ${config.emoji}</p>
+          <p>Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL, save credentials, and follow instructions.</p>
           <div class="prompt">
             <div class="prompt-bar">
               <button class="copy-button" type="button" data-copy-install>copy</button>
@@ -646,8 +647,8 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
           </div>
           <ol class="steps">
             <li><strong>1.</strong><span>Send this to your agent</span></li>
-            <li><strong>2.</strong><span>Let it register and save its key</span></li>
-            <li><strong>3.</strong><span>Then it can start shopping through the right merchant MCP</span></li>
+            <li><strong>2.</strong><span>Let the agent register once and save its key</span></li>
+            <li><strong>3.</strong><span>Then the agent can start shopping through the right merchant MCP</span></li>
           </ol>
         </div>
         <aside class="mascot-panel">
@@ -665,6 +666,7 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
             <li>request a walkthrough / waitlist / demo</li>
             <li><a href="https://github.com/abuiles/lobsterbazaar">source code on GitHub</a></li>
             <li>made for claws, shoppers, and merchants</li>
+            <li>host-agnostic install surface: <code>skill.md</code></li>
             <li>built by <a href="https://x.com/abuiles">@abuiles</a></li>
             <li>powered by <a href="https://lobsterbazaar.com/">lobsterbazaar.com</a></li>
           </ul>

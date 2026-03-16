@@ -212,14 +212,18 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("- US");
   });
 
-  it("renders the landing page with the default mascot slot", async () => {
+  it("renders the landing page with an explicit agent setup prompt", async () => {
     const { app } = await createTestHarness();
 
     const response = await app.fetch(new Request("https://lobsterbrew.test/"));
     const body = await response.text();
 
     expect(response.status).toBe(200);
-    expect(body).toContain("Agent-facing commerce deploy");
+    expect(body).toContain("Send your AI agent to Lobster Bazaar");
+    expect(body).toContain("Prompt to send to your AI agent");
+    expect(body).toContain("https://lobsterbrew.test/skill.md");
+    expect(body).toContain("Setup flow");
+    expect(body).toContain("toggle theme");
     expect(body).toContain('/assets/mascots/lobsterbazaar-default.jpg');
   });
 

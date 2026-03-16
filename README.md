@@ -95,8 +95,10 @@ curl http://127.0.0.1:8787/merchants/sample-roaster/connect
 Generate deterministic SQL from a deploy package:
 
 ```bash
-npm run build:deploy:sql -- deploys/example > build/example.sql
+npm run build:deploy:sql -- deploys/example build/example.sql
 ```
+
+This form writes clean SQL directly to disk and creates parent directories when needed.
 
 For V0, deploy packages must keep:
 

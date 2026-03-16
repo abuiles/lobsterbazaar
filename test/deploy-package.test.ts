@@ -21,6 +21,7 @@ function createDeployConfig(overrides: Record<string, unknown> = {}) {
     vertical_id: "coffee",
     vertical_name: "Coffee",
     brand_name: "Lobster Brew",
+    emoji: "🦞",
     brand_description: "Coffee deploy",
     vertical_summary: "Coffee directory",
     public_directory: true,
@@ -116,6 +117,39 @@ describe("deploy package loading", () => {
     await expect(loadDeployPackage("deploy", createFileReader(files), IMPORTED_AT)).rejects.toThrow(
       /public_directory=false|offers_enabled=false|claim_mode=self_service/i
     );
+  });
+
+  it("parses deploy emoji and falls back when omitted", async () => {
+    const withEmoji = await loadDeployPackage(
+      "deploy",
+      createFileReader(
+        new Map<string, string>([
+          ["deploy/config.json", JSON.stringify(createDeployConfig({ emoji: "☕" }))],
+          [
+            "deploy/merchants.csv",
+            "slug,display_name,store_url,country_codes,notes,claim_status\nsample-roaster,Sample Roaster,https://sample-roaster.com,US,Known sample,claimed"
+          ]
+        ])
+      ),
+      IMPORTED_AT
+    );
+
+    const withoutEmoji = await loadDeployPackage(
+      "deploy",
+      createFileReader(
+        new Map<string, string>([
+          ["deploy/config.json", JSON.stringify(createDeployConfig({ emoji: undefined }))],
+          [
+            "deploy/merchants.csv",
+            "slug,display_name,store_url,country_codes,notes,claim_status\nsample-roaster,Sample Roaster,https://sample-roaster.com,US,Known sample,claimed"
+          ]
+        ])
+      ),
+      IMPORTED_AT
+    );
+
+    expect(withEmoji.config.emoji).toBe("☕");
+    expect(withoutEmoji.config.emoji).toBe("🦞");
   });
 
   it("rejects offers imported for unclaimed merchants", async () => {

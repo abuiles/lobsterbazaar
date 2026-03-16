@@ -48,6 +48,11 @@ The repo now includes a deploy package at [`deploys/example`](./deploys/example)
 - [`merchants.csv`](./deploys/example/merchants.csv)
 - [`offers.json`](./deploys/example/offers.json)
 
+Deploy packages can also set lightweight brand presentation fields such as:
+
+- `brand_name`
+- `emoji`
+
 That package is the canonical local example for:
 
 - deploy config loading
@@ -93,6 +98,16 @@ Run local D1 setup before starting `wrangler dev`. If the dev server is already 
 - `OPERATOR_TOKEN` is required for `POST /internal/materialize`
 
 If you change those values, restart `wrangler dev` and rematerialize artifacts so the cached `skill.md` matches the current runtime config.
+
+For deploy packages, set the same branding in `config.json` when you want generated artifacts to carry it too. For example:
+
+```json
+{
+  "deploy_id": "lobsterbrew",
+  "brand_name": "Lobster Brew",
+  "emoji": "🦞"
+}
+```
 
 Then materialize the public artifacts into the bound R2 bucket:
 

@@ -363,6 +363,7 @@ function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string 
 
 function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: string): string {
   const skillUrl = `${origin.replace(/\/$/, "")}/skill.md`;
+  const installInstruction = `Read ${skillUrl} and follow the instructions to join ${config.brandName}`;
 
   return `<!doctype html>
 <html lang="en">
@@ -516,6 +517,24 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
         border-radius: 12px;
         padding: 18px 22px;
       }
+      .prompt-bar {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 10px;
+      }
+      .copy-button {
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--muted);
+        border-radius: 999px;
+        padding: 6px 10px;
+        font: inherit;
+        cursor: pointer;
+        font-size: 0.86rem;
+      }
+      .copy-button:hover {
+        color: var(--ink);
+      }
       .prompt pre {
         margin: 0;
         white-space: pre-wrap;
@@ -597,7 +616,10 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
           <p class="caption muted">${config.verticalSummary}</p>
           <p class="install-copy">Send your AI agent to ${config.brandName} ${config.emoji}</p>
           <div class="prompt">
-            <pre>Read ${skillUrl} and follow the instructions to join ${config.brandName}</pre>
+            <div class="prompt-bar">
+              <button class="copy-button" type="button" data-copy-install>copy</button>
+            </div>
+            <pre data-install-instruction>${installInstruction}</pre>
           </div>
           <ol class="steps">
             <li><strong>1.</strong><span>Send this to your agent</span></li>
@@ -628,17 +650,34 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
         (() => {
           const root = document.documentElement;
           const button = document.querySelector("[data-theme-toggle]");
+          const copyButton = document.querySelector("[data-copy-install]");
+          const instruction = document.querySelector("[data-install-instruction]");
           const storageKey = "lobsterbazaar-theme";
           const savedTheme = localStorage.getItem(storageKey);
           if (savedTheme === "light" || savedTheme === "dark") {
             root.dataset.theme = savedTheme;
           }
-          if (!button) return;
-          button.addEventListener("click", () => {
-            const nextTheme = root.dataset.theme === "light" ? "dark" : "light";
-            root.dataset.theme = nextTheme;
-            localStorage.setItem(storageKey, nextTheme);
-          });
+          if (button) {
+            button.addEventListener("click", () => {
+              const nextTheme = root.dataset.theme === "light" ? "dark" : "light";
+              root.dataset.theme = nextTheme;
+              localStorage.setItem(storageKey, nextTheme);
+            });
+          }
+          if (copyButton && instruction) {
+            copyButton.addEventListener("click", async () => {
+              const original = copyButton.textContent || "copy";
+              try {
+                await navigator.clipboard.writeText(instruction.textContent || "");
+                copyButton.textContent = "copied";
+              } catch {
+                copyButton.textContent = "copy failed";
+              }
+              setTimeout(() => {
+                copyButton.textContent = original;
+              }, 1200);
+            });
+          }
         })();
       </script>
     </main>

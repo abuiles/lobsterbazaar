@@ -127,6 +127,7 @@ export function parseDeployConfig(text: string): DeployFileConfig {
     brandName: assertString(data.brand_name, "brand_name"),
     brandDescription: assertString(data.brand_description, "brand_description"),
     verticalSummary: assertString(data.vertical_summary, "vertical_summary"),
+    emoji: typeof data.emoji === "string" && data.emoji.trim() ? data.emoji.trim() : "🦞",
     defaultCountries: Array.isArray(data.default_countries)
       ? data.default_countries.map((value) => normalizeCountryCode(assertString(value, "default_countries")))
       : [],

@@ -369,7 +369,7 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
   const countryExampleUrl = `${baseUrl}/countries/CO.md`;
   const offersExampleUrl = `${baseUrl}/offers/CO.md`;
   const connectExampleUrl = `${baseUrl}/merchants/devocion/connect.md`;
-  const agentPrompt = `Read ${skillUrl} and install ${config.brandName}. Register yourself, save the API key locally, check ${countriesUrl} to match the owner's country, then use /merchants/{slug}/connect.md before calling any Shopify Storefront MCP endpoint.`;
+  const agentPrompt = `Read ${skillUrl} and follow the instructions to join ${config.brandName}.`;
 
   return `<!doctype html>
 <html lang="en">
@@ -726,14 +726,15 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
         <div class="grid">
           <section class="hero">
             <div class="hero-copy">
-              <p class="eyebrow">Send your AI agent to ${config.brandName}</p>
+              <p class="eyebrow">Send your agent to ${config.brandName}</p>
               <h1>give your lobster one clear install target.</h1>
               <p>${config.verticalSummary}</p>
-              <p>Use the prompt below to install the deploy into a lobster, then let the lobster register itself, discover merchants, and route shopping through merchant Shopify Storefront MCP endpoints.</p>
+              <p>Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL, save credentials, and follow instructions (any).</p>
+              <p>Use the prompt below to install the deploy into your agent, then let it register itself, discover merchants, and route shopping through merchant Shopify Storefront MCP endpoints.</p>
             </div>
 
             <div class="prompt-card">
-              <p class="prompt-label">Prompt to send to your AI agent</p>
+              <p class="prompt-label">Prompt to send to your agent</p>
               <pre>${agentPrompt}</pre>
             </div>
 
@@ -749,7 +750,7 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
             </div>
             <div class="terminal">
               <p><strong>operator note</strong></p>
-              <p>Keep the deploy instructions short and literal. The lobster should read the skill, register once, save its key, then move to country and merchant selection.</p>
+              <p>Keep the deploy instructions short and literal. The agent should read the skill, register once, save its key, then move to country and merchant selection.</p>
             </div>
           </aside>
         </div>
@@ -761,15 +762,15 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
               <li>
                 <span class="step-number">1</span>
                 <div class="step-copy">
-                  <strong>Send the install prompt to your lobster</strong>
+                  <strong>Send the install prompt to your agent</strong>
                   <p>Start with <span class="inline-code">${skillUrl}</span>. The skill is the canonical contract for registration, discovery, and Shopify MCP routing.</p>
                 </div>
               </li>
               <li>
                 <span class="step-number">2</span>
                 <div class="step-copy">
-                  <strong>Let it register and save its one-time key</strong>
-                  <p>The lobster should call <span class="inline-code">${registerUrl}</span>, keep the returned credentials locally, and avoid asking for them again.</p>
+                  <strong>Let the agent register and save its one-time key</strong>
+                  <p>The agent should call <span class="inline-code">${registerUrl}</span>, keep the returned credentials locally, and avoid asking for them again.</p>
                 </div>
               </li>
               <li>
@@ -783,7 +784,7 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
                 <span class="step-number">4</span>
                 <div class="step-copy">
                   <strong>Resolve the merchant before opening Shopify MCP</strong>
-                  <p>The lobster must call a merchant connect page first, then use the returned Storefront MCP endpoint for live catalog, cart, and checkout work.</p>
+                  <p>The agent must call a merchant connect page first, then use the returned Storefront MCP endpoint for live catalog, cart, and checkout work.</p>
                 </div>
               </li>
             </ol>
@@ -812,6 +813,7 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
 
             <ul class="detail-list">
               <li>Discovery happens here. Product truth and cart truth stay with the merchant Shopify Storefront MCP.</li>
+              <li>The install surface is host-agnostic: if an agent can fetch <span class="inline-code">skill.md</span>, store returned credentials, and make HTTP requests, it can use this deploy.</li>
               <li>The lobster should attach <span class="inline-code">lb_source__ = ${config.deployId}</span> when updating carts.</li>
               <li>The owner finishes payment in Shopify checkout. The lobster stops at checkout handoff.</li>
             </ul>

@@ -219,10 +219,14 @@ describe("lobsterbazaar worker", () => {
     const body = await response.text();
 
     expect(response.status).toBe(200);
-    expect(body).toContain("Send your AI agent to Lobster Bazaar");
-    expect(body).toContain("Prompt to send to your AI agent");
+    expect(body).toContain("Send your agent to Lobster Bazaar");
+    expect(body).toContain("Prompt to send to your agent");
+    expect(body).toContain("Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL, save credentials, and follow instructions (any).");
     expect(body).toContain("https://lobsterbrew.test/skill.md");
+    expect(body).toContain("Read https://lobsterbrew.test/skill.md and follow the instructions to join Lobster Bazaar.");
     expect(body).toContain("Setup flow");
+    expect(body).toContain("Send the install prompt to your agent");
+    expect(body).toContain("The install surface is host-agnostic:");
     expect(body).toContain("toggle theme");
     expect(body).toContain('/assets/mascots/lobsterbazaar-default.jpg');
   });

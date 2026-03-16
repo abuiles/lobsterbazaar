@@ -42,13 +42,7 @@ The Worker currently provides:
 
 ## Specs and docs
 
-- [System Map V0](./specs/2026-03-15-system-map-v0.md)
-- [Object Model V0](./specs/2026-03-15-object-model-v0.md)
-- [BYO Merchant Deploy Model](./specs/2026-03-15-byo-merchant-deploy-model.md)
-- [Merchant Manifest And Offer Schema](./specs/2026-03-15-merchant-manifest-and-offer-schema.md)
-- [Buyer Claw Request Flow](./specs/2026-03-15-buyer-claw-request-flow.md)
-- [Agent Bootstrap Skill V0](./specs/2026-03-15-agent-bootstrap-skill-v0.md)
-- [API Contracts V0](./specs/2026-03-15-api-contracts-v0.md)
+- [LobsterBazaar Spec V0](./specs/spec.md)
 - [V0 Build Plan](./plans/2026-03-15-feat-lobsterbazaar-v0-directory-mcp-handoff-plan.md)
 
 Recommended reading order:

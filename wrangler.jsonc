@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lobsterbazaar",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-03-15",
+  "workers_dev": true,
+  "vars": {
+    "DEPLOY_ID": "lobsterbazaar",
+    "BRAND_NAME": "Lobster Bazaar",
+    "DEPLOY_DOMAIN": "localhost:8787",
+    "VERTICAL_SUMMARY": "A deploy-specific discovery layer for merchants that lets lobsters find stores, inspect active offers, resolve Storefront MCP endpoints, and hand off checkout to the owner."
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lobsterbazaar",
+      "database_id": "local-lobsterbazaar-db"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ARTIFACTS",
+      "bucket_name": "lobsterbazaar-artifacts"
+    }
+  ]
+}
+

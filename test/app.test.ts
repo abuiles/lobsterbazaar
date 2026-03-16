@@ -212,6 +212,17 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("- US");
   });
 
+  it("renders the landing page with the default mascot slot", async () => {
+    const { app } = await createTestHarness();
+
+    const response = await app.fetch(new Request("https://lobsterbrew.test/"));
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).toContain("Agent-facing commerce deploy");
+    expect(body).toContain('/assets/mascots/lobsterbazaar-default.jpg');
+  });
+
   it("returns country offers as markdown", async () => {
     const { app } = await createTestHarness();
 

@@ -95,7 +95,8 @@ export async function createTestHarness(options: TestHarnessOptions = {}) {
       brandName: "Lobster Bazaar",
       deployId: "lobsterbrew",
       deployDomain: "lobsterbrew.test",
-      verticalSummary: "Coffee-oriented merchant discovery for lobsters."
+      verticalSummary: "Coffee-oriented merchant discovery for lobsters.",
+      mascotUrl: "/assets/mascots/lobsterbazaar-default.jpg"
     },
     operatorToken: "test-operator-token",
     now: () => "2026-03-15T12:00:00Z"

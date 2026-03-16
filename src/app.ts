@@ -12,6 +12,7 @@ interface AppDependencies {
   artifacts: ArtifactStore;
   repositories: Repositories;
   config: ReturnType<typeof readDeployConfig>;
+  staticAssets?: Fetcher;
   operatorToken?: string;
   now: () => string;
 }
@@ -24,6 +25,10 @@ export function createApp(dependencies: AppDependencies) {
         const pathname = url.pathname.replace(/\/+$/, "") || "/";
         const wantsMarkdown = pathname.endsWith(".md");
         const normalizedPath = wantsMarkdown ? pathname.slice(0, -3) : pathname;
+
+        if (pathname.startsWith("/assets/") && dependencies.staticAssets) {
+          return dependencies.staticAssets.fetch(request);
+        }
 
         if (normalizedPath === "/" && isMethod(request, "GET")) {
           return html(renderLandingPage(dependencies.config));
@@ -380,7 +385,7 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>): string 
         color: var(--ink);
       }
       main {
-        max-width: 820px;
+        max-width: 1040px;
         margin: 0 auto;
         padding: 56px 20px 72px;
       }
@@ -390,6 +395,35 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>): string 
         border-radius: 20px;
         padding: 28px;
         box-shadow: 0 18px 50px rgba(26, 20, 15, 0.08);
+        display: grid;
+        gap: 24px;
+      }
+      @media (min-width: 860px) {
+        article {
+          grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+          align-items: start;
+        }
+      }
+      .copy {
+        min-width: 0;
+      }
+      .mascot-panel {
+        background: linear-gradient(180deg, rgba(255, 246, 233, 0.95), rgba(240, 227, 206, 0.92));
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 14px;
+      }
+      .mascot-frame {
+        aspect-ratio: 4 / 5;
+        border-radius: 14px;
+        overflow: hidden;
+        background: #efe4d2;
+      }
+      .mascot-frame img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
       }
       h1 {
         margin: 0 0 12px;
@@ -425,15 +459,22 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>): string 
   <body>
     <main>
       <article>
-        <p class="muted">Agent-facing commerce deploy</p>
-        <h1>${config.brandName}</h1>
-        <p>${config.verticalSummary}</p>
-        <p>Install the deploy into a lobster with <code>/skill.md</code>, register the claw, discover merchants by country, then hand off catalog and cart work to the selected merchant’s Storefront MCP endpoint.</p>
-        <div class="links">
-          <a href="/skill.md">Open skill.md</a>
-          <a href="/countries/US">Example country JSON</a>
-          <a href="/offers/US">Example offers JSON</a>
+        <div class="copy">
+          <p class="muted">Agent-facing commerce deploy</p>
+          <h1>${config.brandName}</h1>
+          <p>${config.verticalSummary}</p>
+          <p>Install the deploy into a lobster with <code>/skill.md</code>, register the claw, discover merchants by country, then hand off catalog and cart work to the selected merchant’s Storefront MCP endpoint.</p>
+          <div class="links">
+            <a href="/skill.md">Open skill.md</a>
+            <a href="/countries/US">Example country JSON</a>
+            <a href="/offers/US">Example offers JSON</a>
+          </div>
         </div>
+        <aside class="mascot-panel">
+          <div class="mascot-frame">
+            <img src="${config.mascotUrl}" alt="${config.brandName} mascot">
+          </div>
+        </aside>
       </article>
     </main>
   </body>
@@ -481,6 +522,7 @@ export function createProductionApp(env: Env) {
     artifacts: new R2ArtifactStore(env.ARTIFACTS),
     repositories: new D1Repositories(env.DB),
     config: readDeployConfig(env),
+    staticAssets: env.ASSETS,
     operatorToken: env.OPERATOR_TOKEN,
     now: () => new Date().toISOString()
   });

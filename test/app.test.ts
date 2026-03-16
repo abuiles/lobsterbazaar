@@ -295,8 +295,20 @@ describe("lobsterbazaar worker", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/markdown");
+    expect(body).toContain("---\nname: lobsterbrew");
+    expect(body).toContain("homepage: lobsterbrew.test");
     expect(body).toContain("# Lobster Bazaar Skill");
-    expect(body).toContain("POST to `https://lobsterbrew.test/claws/register`");
+    expect(body).toContain("Base URL: lobsterbrew.test");
+    expect(body).toContain("Use it when the owner wants to buy coffee.");
+    expect(body).toContain("POST to `lobsterbrew.test/claws/register`");
+    expect(body).toContain("`GET lobsterbrew.test/countries.md`");
+    expect(body).toContain("`GET lobsterbrew.test/countries/{country_code}.md`");
+    expect(body).toContain("`GET lobsterbrew.test/offers/{country_code}.md`");
+    expect(body).toContain("`lobsterbrew.test/merchants/{slug}/connect.md`");
+    expect(body).toContain("Shopify Storefront MCP");
+    expect(body).toContain("Treat merchant MCP data as the source of truth");
+    expect(body).toContain("Do not infer merchant MCP URLs yourself");
+    expect(body).toContain("Prefer the `.md` endpoints for agent consumption.");
     expect(body).toContain("lb_source__ = lobsterbrew");
   });
 

@@ -8,12 +8,6 @@
   "observability": {
     "enabled": true
   },
-  "vars": {
-    "DEPLOY_ID": "lobsterbazaar",
-    "BRAND_NAME": "Lobster Bazaar",
-    "DEPLOY_DOMAIN": "localhost:8787",
-    "VERTICAL_SUMMARY": "A deploy-specific discovery layer for merchants that lets lobsters find stores, inspect active offers, resolve Storefront MCP endpoints, and hand off checkout to the owner."
-  },
   "d1_databases": [
     {
       "binding": "DB",

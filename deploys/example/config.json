@@ -1,14 +1,13 @@
 {
   "deploy_id": "lobsterbrew",
-  "deploy_domain": "lobsterbrew.test",
+  "deploy_domain": "lobsterbrew.com",
   "vertical_id": "coffee",
   "vertical_name": "Coffee",
   "brand_name": "Lobster Brew",
   "brand_description": "A coffee-specific lobsterbazaar deploy for roaster discovery and Shopify MCP handoff.",
   "vertical_summary": "Coffee-oriented merchant discovery for lobsters. Use this deploy to shortlist roasters by country, inspect active offers, resolve Storefront MCP endpoints, and stop at checkout handoff.",
-  "default_countries": ["US", "CA"],
+  "default_countries": ["US", "CA", "CO", "UK"],
   "public_directory": true,
   "offers_enabled": true,
   "claim_mode": "operator_managed"
 }
-

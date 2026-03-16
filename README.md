@@ -63,7 +63,6 @@ That package is the canonical local example for:
 npm install
 npm run typecheck
 npm test
-npm run dev
 ```
 
 Before using the Worker with real data, create the local D1 schema and load sample records:
@@ -74,11 +73,27 @@ npx wrangler d1 execute lobsterbazaar --local --file migrations/0001_init.sql
 npx wrangler d1 execute lobsterbazaar --local --file seeds/example.sql
 ```
 
+Run local D1 setup before starting `wrangler dev`. If the dev server is already running, stop it before executing local D1 commands or SQLite may return `database is locked`.
+
+`.dev.vars` controls the runtime deploy identity used by the local worker. In particular:
+
+- `DEPLOY_ID` controls the claw API key prefix and `lb_source__` cart attribute
+- `BRAND_NAME`, `DEPLOY_DOMAIN`, and `VERTICAL_SUMMARY` control the runtime `GET /skill.md`
+- `OPERATOR_TOKEN` is required for `POST /internal/materialize`
+
+If you change those values, restart `wrangler dev` and rematerialize artifacts so the cached `skill.md` matches the current runtime config.
+
 Then materialize the public artifacts into the bound R2 bucket:
 
 ```bash
 curl -X POST http://127.0.0.1:8787/internal/materialize \
   -H "Authorization: Bearer replace-me"
+```
+
+After local D1 setup and materialization are complete, start the worker:
+
+```bash
+npm run dev
 ```
 
 Useful local checks:
@@ -90,7 +105,7 @@ curl http://127.0.0.1:8787/offers/US
 curl http://127.0.0.1:8787/merchants/sample-roaster/connect
 ```
 
-## Deploy import workflow
+## Runtime import workflow
 
 Generate deterministic SQL from a deploy package:
 
@@ -112,7 +127,18 @@ Load that SQL into local D1:
 npx wrangler d1 execute lobsterbazaar --local --file build/example.sql
 ```
 
-Generate local review artifacts from the same deploy package:
+If `wrangler dev` is already running, stop it first or local SQLite may return `database is locked`.
+
+Then rematerialize the runtime public artifacts used by the worker:
+
+```bash
+curl -X POST http://127.0.0.1:8787/internal/materialize \
+  -H "Authorization: Bearer replace-me"
+```
+
+## Offline review artifact workflow
+
+Generate local review artifacts directly from the same deploy package:
 
 ```bash
 npm run build:deploy:artifacts -- deploys/example build/example

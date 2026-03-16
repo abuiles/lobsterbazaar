@@ -94,6 +94,7 @@ Offer schema is the control-plane contract for merchant-authored incentives.
 
 | Field | Type | Notes |
 |---|---|---|
+| `offer_id` | string | Stable offer ID for deterministic re-imports |
 | `merchant_slug` | string | Owning merchant |
 | `title` | string | Short offer title |
 | `summary` | string | Short explanation |
@@ -116,6 +117,7 @@ Offer schema is the control-plane contract for merchant-authored incentives.
 
 ```json
 {
+  "offer_id": "offer_200_degs_first_order",
   "merchant_slug": "200-degs",
   "title": "10% off first coffee order",
   "summary": "First-time buyers get 10% off selected coffees.",

@@ -1,9 +1,11 @@
 import type { DeployFileConfig, DeployPackage, Merchant, MerchantClaim, Offer } from "./domain";
 import { badRequest, conflict } from "./errors";
-import { createId } from "./ids";
 import { normalizeCountryCode } from "./merchant";
 
 type FileReader = (path: string) => Promise<string>;
+
+const MERCHANT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const SUPPORTED_CLAIM_MODE = "operator_managed";
 
 const REQUIRED_CONFIG_FIELDS = [
   "deploy_id",
@@ -27,11 +29,15 @@ function splitPipeList(value: string | undefined): string[] {
 }
 
 function parseBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "undefined") {
+    return fallback;
+  }
+
   if (typeof value === "boolean") {
     return value;
   }
 
-  return fallback;
+  throw badRequest("Expected boolean config value");
 }
 
 function assertString(value: unknown, field: string): string {
@@ -50,11 +56,67 @@ function parseJsonObject(text: string): Record<string, unknown> {
   }
 }
 
+function assertMerchantSlug(value: string, field: string): string {
+  if (!MERCHANT_SLUG_PATTERN.test(value)) {
+    throw badRequest(`${field} must be a lowercase URL-safe slug`);
+  }
+
+  return value;
+}
+
+function parseClaimMode(value: unknown): DeployFileConfig["claimMode"] {
+  if (typeof value === "undefined") {
+    return SUPPORTED_CLAIM_MODE;
+  }
+
+  if (value !== SUPPORTED_CLAIM_MODE) {
+    throw badRequest(`claim_mode=${String(value)} is not supported in V0`);
+  }
+
+  return SUPPORTED_CLAIM_MODE;
+}
+
+function parseClaimStatus(value: string | undefined): Merchant["claimStatus"] {
+  return value === "claimed" ? "claimed" : "unclaimed";
+}
+
+function parseOfferStatus(value: unknown): Offer["status"] {
+  return value === "draft" || value === "expired" || value === "active" ? value : "draft";
+}
+
+function assertUnique(values: string[], label: string): void {
+  const seen = new Set<string>();
+
+  for (const value of values) {
+    if (seen.has(value)) {
+      throw badRequest(`Duplicate ${label}: ${value}`);
+    }
+
+    seen.add(value);
+  }
+}
+
+function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
 export function parseDeployConfig(text: string): DeployFileConfig {
   const data = parseJsonObject(text);
 
   for (const field of REQUIRED_CONFIG_FIELDS) {
     assertString(data[field], field);
+  }
+
+  const publicDirectory = parseBoolean(data.public_directory, true);
+  const offersEnabled = parseBoolean(data.offers_enabled, true);
+  const claimMode = parseClaimMode(data.claim_mode);
+
+  if (!publicDirectory) {
+    throw badRequest("public_directory=false is not supported in V0");
+  }
+
+  if (!offersEnabled) {
+    throw badRequest("offers_enabled=false is not supported in V0");
   }
 
   return {
@@ -68,9 +130,9 @@ export function parseDeployConfig(text: string): DeployFileConfig {
     defaultCountries: Array.isArray(data.default_countries)
       ? data.default_countries.map((value) => normalizeCountryCode(assertString(value, "default_countries")))
       : [],
-    publicDirectory: parseBoolean(data.public_directory, true),
-    offersEnabled: parseBoolean(data.offers_enabled, true),
-    claimMode: "operator_managed"
+    publicDirectory,
+    offersEnabled,
+    claimMode
   };
 }
 
@@ -121,21 +183,31 @@ export function parseCsv(text: string): Array<Record<string, string>> {
     rows.push(row);
   }
 
+  if (inQuotes) {
+    throw badRequest("CSV contains an unterminated quoted field");
+  }
+
   const [headers, ...entries] = rows.filter((entry) => entry.some((value) => value.trim() !== ""));
   if (!headers || headers.length === 0) {
     return [];
   }
 
-  return entries.map((values) =>
-    Object.fromEntries(
-      headers.map((header, index) => [header.trim(), values[index]?.trim() ?? ""])
-    )
-  );
+  return entries.map((values, index) => {
+    if (values.length !== headers.length) {
+      throw badRequest(
+        `CSV row ${index + 2} has ${values.length} columns; expected ${headers.length}`
+      );
+    }
+
+    return Object.fromEntries(
+      headers.map((header, headerIndex) => [header.trim(), values[headerIndex]?.trim() ?? ""])
+    );
+  });
 }
 
 export function parseMerchantManifest(text: string, importedAt = "2026-03-15T00:00:00Z"): Merchant[] {
-  return parseCsv(text).map((row) => {
-    const slug = assertString(row.slug, "slug");
+  const merchants = parseCsv(text).map((row) => {
+    const slug = assertMerchantSlug(assertString(row.slug, "slug"), "slug");
     const displayName = assertString(row.display_name, "display_name");
     const storeUrl = assertString(row.store_url, "store_url");
     const notes = assertString(row.notes, "notes");
@@ -156,12 +228,19 @@ export function parseMerchantManifest(text: string, importedAt = "2026-03-15T00:
       notes,
       tags: splitPipeList(row.tags),
       claimContact: row.claim_contact || undefined,
-      claimStatus: row.claim_status === "claimed" ? "claimed" : "unclaimed",
+      claimStatus: parseClaimStatus(row.claim_status),
       verticalMetadata: row.vertical_metadata ? parseJsonObject(row.vertical_metadata) : {},
       createdAt: importedAt,
       updatedAt: importedAt
     };
   });
+
+  assertUnique(
+    merchants.map((merchant) => merchant.slug),
+    "merchant slug"
+  );
+
+  return merchants;
 }
 
 export function parseOffersFile(text: string, importedAt = "2026-03-15T00:00:00Z"): Offer[] {
@@ -177,9 +256,12 @@ export function parseOffersFile(text: string, importedAt = "2026-03-15T00:00:00Z
     throw badRequest("Offers file must be a JSON array");
   }
 
-  return data.map((entry, index) => {
+  const offers = data.map((entry, index) => {
     const record = entry as Record<string, unknown>;
-    const merchantSlug = assertString(record.merchant_slug, `offers[${index}].merchant_slug`);
+    const merchantSlug = assertMerchantSlug(
+      assertString(record.merchant_slug, `offers[${index}].merchant_slug`),
+      `offers[${index}].merchant_slug`
+    );
     const title = assertString(record.title, `offers[${index}].title`);
     const summary = assertString(record.summary, `offers[${index}].summary`);
     const validThrough = assertString(record.valid_through, `offers[${index}].valid_through`);
@@ -195,9 +277,7 @@ export function parseOffersFile(text: string, importedAt = "2026-03-15T00:00:00Z
     }
 
     return {
-      offerId: typeof record.offer_id === "string" && record.offer_id.trim()
-        ? record.offer_id.trim()
-        : createId("offer"),
+      offerId: assertString(record.offer_id, `offers[${index}].offer_id`),
       merchantSlug,
       title,
       summary,
@@ -209,10 +289,7 @@ export function parseOffersFile(text: string, importedAt = "2026-03-15T00:00:00Z
       priority: typeof record.priority === "number" ? record.priority : 0,
       publicProofUrl: typeof record.public_proof_url === "string" ? record.public_proof_url : undefined,
       offerCode: typeof record.offer_code === "string" ? record.offer_code : undefined,
-      status:
-        record.status === "draft" || record.status === "expired" || record.status === "active"
-          ? record.status
-          : "draft",
+      status: parseOfferStatus(record.status),
       verticalMetadata:
         record.vertical_metadata && typeof record.vertical_metadata === "object"
           ? (record.vertical_metadata as Record<string, unknown>)
@@ -221,6 +298,13 @@ export function parseOffersFile(text: string, importedAt = "2026-03-15T00:00:00Z
       updatedAt: importedAt
     };
   });
+
+  assertUnique(
+    offers.map((offer) => offer.offerId),
+    "offer_id"
+  );
+
+  return offers;
 }
 
 export function buildImportedClaims(merchants: Merchant[]): MerchantClaim[] {
@@ -256,8 +340,7 @@ export async function loadDeployPackage(
     const offersText = await readFile(`${baseDir}/offers.json`);
     offers = parseOffersFile(offersText, importedAt);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (!message.includes("ENOENT")) {
+    if (!isFileNotFoundError(error)) {
       throw error;
     }
   }

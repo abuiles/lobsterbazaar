@@ -177,6 +177,18 @@ export class MemoryRepositories implements Repositories {
     ).sort();
   }
 
+  async listMerchantSlugs(): Promise<string[]> {
+    return Array.from(this.merchants.keys()).sort();
+  }
+
+  async listOfferIds(): Promise<string[]> {
+    return Array.from(this.offers.keys()).sort();
+  }
+
+  async listClaimIds(): Promise<string[]> {
+    return Array.from(this.claims.keys()).sort();
+  }
+
   async putMerchant(input: CreateMerchantInput): Promise<void> {
     const now = new Date().toISOString();
     this.merchants.set(input.slug, {
@@ -213,6 +225,30 @@ export class MemoryRepositories implements Repositories {
       createdAt: input.createdAt ?? now,
       updatedAt: input.updatedAt ?? now
     });
+  }
+
+  async deleteMerchant(slug: string): Promise<void> {
+    this.merchants.delete(slug);
+
+    for (const [claimId, claim] of this.claims.entries()) {
+      if (claim.merchantSlug === slug) {
+        this.claims.delete(claimId);
+      }
+    }
+
+    for (const [offerId, offer] of this.offers.entries()) {
+      if (offer.merchantSlug === slug) {
+        this.offers.delete(offerId);
+      }
+    }
+  }
+
+  async deleteOffer(offerId: string): Promise<void> {
+    this.offers.delete(offerId);
+  }
+
+  async deleteClaim(claimId: string): Promise<void> {
+    this.claims.delete(claimId);
   }
 
   async listClaws(): Promise<Claw[]> {

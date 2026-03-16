@@ -318,6 +318,30 @@ export class D1Repositories implements Repositories {
     return (result.results ?? []).map((row) => row.country_code);
   }
 
+  async listMerchantSlugs(): Promise<string[]> {
+    const result = await this.db
+      .prepare(`SELECT slug FROM merchants ORDER BY slug ASC`)
+      .all<{ slug: string }>();
+
+    return (result.results ?? []).map((row) => row.slug);
+  }
+
+  async listOfferIds(): Promise<string[]> {
+    const result = await this.db
+      .prepare(`SELECT offer_id FROM offers ORDER BY offer_id ASC`)
+      .all<{ offer_id: string }>();
+
+    return (result.results ?? []).map((row) => row.offer_id);
+  }
+
+  async listClaimIds(): Promise<string[]> {
+    const result = await this.db
+      .prepare(`SELECT claim_id FROM merchant_claims ORDER BY claim_id ASC`)
+      .all<{ claim_id: string }>();
+
+    return (result.results ?? []).map((row) => row.claim_id);
+  }
+
   async putMerchant(input: CreateMerchantInput): Promise<void> {
     const now = new Date().toISOString();
     const createdAt = input.createdAt ?? now;
@@ -431,6 +455,18 @@ export class D1Repositories implements Repositories {
         input.updatedAt ?? now
       )
       .run();
+  }
+
+  async deleteMerchant(slug: string): Promise<void> {
+    await this.db.prepare(`DELETE FROM merchants WHERE slug = ?1`).bind(slug).run();
+  }
+
+  async deleteOffer(offerId: string): Promise<void> {
+    await this.db.prepare(`DELETE FROM offers WHERE offer_id = ?1`).bind(offerId).run();
+  }
+
+  async deleteClaim(claimId: string): Promise<void> {
+    await this.db.prepare(`DELETE FROM merchant_claims WHERE claim_id = ?1`).bind(claimId).run();
   }
 
   async listClaws(): Promise<Claw[]> {

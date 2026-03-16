@@ -46,8 +46,14 @@ export interface Repositories {
   listActiveOffers(countryCode: string, now: string): Promise<PublicOffer[]>;
   listMerchantArtifacts(now: string): Promise<MerchantArtifact[]>;
   listCountryCodes(): Promise<string[]>;
+  listMerchantSlugs(): Promise<string[]>;
+  listOfferIds(): Promise<string[]>;
+  listClaimIds(): Promise<string[]>;
   putMerchant(input: CreateMerchantInput): Promise<void>;
   putOffer(input: CreateOfferInput): Promise<void>;
   putClaim(input: CreateClaimInput): Promise<void>;
+  deleteMerchant(slug: string): Promise<void>;
+  deleteOffer(offerId: string): Promise<void>;
+  deleteClaim(claimId: string): Promise<void>;
   listClaws(): Promise<Claw[]>;
 }

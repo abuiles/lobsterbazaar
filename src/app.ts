@@ -162,6 +162,7 @@ export function createApp(dependencies: AppDependencies) {
           const payload: MerchantConnectPayload = {
             merchant: {
               name: artifact.displayName,
+              connectPath: `/merchants/${artifact.slug}/connect`,
               storeUrl: artifact.storeUrl
             },
             mcp: {
@@ -188,6 +189,7 @@ export function createApp(dependencies: AppDependencies) {
           return json({
             merchant: {
               name: payload.merchant.name,
+              connect_path: payload.merchant.connectPath,
               store_url: payload.merchant.storeUrl
             },
             mcp: payload.mcp,
@@ -316,6 +318,7 @@ function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string 
     "## Merchant",
     "",
     `- name: \`${payload.merchant.name}\``,
+    `- connect_path: \`${payload.merchant.connectPath}\``,
     `- store_url: \`${payload.merchant.storeUrl}\``,
     `- storefront_mcp_url: \`${payload.mcp.url}\``,
     ""

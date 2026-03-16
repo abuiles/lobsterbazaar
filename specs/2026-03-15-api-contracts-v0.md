@@ -292,6 +292,7 @@ GET /merchants/sample-roaster/connect
 {
   "merchant": {
     "name": "Sample Roaster",
+    "connect_path": "/merchants/sample-roaster/connect",
     "store_url": "https://sample-roaster.com"
   },
   "mcp": {
@@ -321,6 +322,7 @@ GET /merchants/sample-roaster/connect
 | Field | Type | Notes |
 |---|---|---|
 | `merchant.name` | string | Public merchant name |
+| `merchant.connect_path` | string | Full route for this merchant connect call |
 | `merchant.store_url` | string | Canonical merchant URL |
 | `mcp.url` | string | Resolved Storefront MCP endpoint |
 | `cart_attributes` | array | Attributes the claw must attach |

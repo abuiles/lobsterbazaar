@@ -55,6 +55,7 @@ interface OffersResponse {
 interface MerchantConnectResponse {
   merchant: {
     name: string;
+    connect_path: string;
     store_url: string;
   };
   mcp: {
@@ -241,6 +242,7 @@ describe("lobsterbazaar worker", () => {
 
     expect(response.status).toBe(200);
     expect(body.merchant.name).toBe("Claimed Roaster");
+    expect(body.merchant.connect_path).toBe("/merchants/claimed-roaster/connect");
     expect(body.mcp.url).toBe("https://claimed-roaster.myshopify.com/api/mcp");
     expect(body.offers).toHaveLength(1);
     expect(body.offers[0]?.offer_id).toBe("offer_active");
@@ -260,6 +262,7 @@ describe("lobsterbazaar worker", () => {
     expect(response.status).toBe(200);
     expect(body).toContain("# Merchant Connect");
     expect(body).toContain("- name: `Claimed Roaster`");
+    expect(body).toContain("connect_path: `/merchants/claimed-roaster/connect`");
     expect(body).toContain("store_url: `https://claimed-roaster.com`");
     expect(body).toContain("storefront_mcp_url: `https://claimed-roaster.myshopify.com/api/mcp`");
     expect(body).toContain("10% off first order");

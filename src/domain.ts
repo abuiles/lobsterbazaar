@@ -95,6 +95,7 @@ export interface PublicOffer {
 export interface MerchantConnectPayload {
   merchant: {
     name: string;
+    connectPath: string;
     storeUrl: string;
   };
   mcp: {

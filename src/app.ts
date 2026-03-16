@@ -162,6 +162,7 @@ export function createApp(dependencies: AppDependencies) {
           const payload: MerchantConnectPayload = {
             merchant: {
               name: artifact.displayName,
+              slug: artifact.slug,
               connectPath: `/merchants/${artifact.slug}/connect`,
               storeUrl: artifact.storeUrl
             },
@@ -313,7 +314,6 @@ function renderOffersMarkdown(offers: Array<{
 }
 
 function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string {
-  const merchantSlug = payload.merchant.connectPath.match(/^\/merchants\/([^/]+)\/connect$/)?.[1] ?? "unknown";
   const cartAttributeLines = payload.cartAttributes.length === 0
     ? ["  - none"]
     : payload.cartAttributes.map((attribute) => `  - ${attribute.key}: ${attribute.value}`);
@@ -326,7 +326,7 @@ function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string 
     "",
     "## Merchant Context",
     `- merchant_name: \`${payload.merchant.name}\``,
-    `- merchant_slug: \`${merchantSlug}\``,
+    `- merchant_slug: \`${payload.merchant.slug}\``,
     `- connect_path: \`${payload.merchant.connectPath}\``,
     `- store_url: \`${payload.merchant.storeUrl}\``,
     `- storefront_mcp_url: \`${payload.mcp.url}\``,

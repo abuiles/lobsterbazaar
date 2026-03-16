@@ -55,6 +55,7 @@ interface OffersResponse {
 interface MerchantConnectResponse {
   merchant: {
     name: string;
+    slug?: string;
     connect_path: string;
     store_url: string;
   };

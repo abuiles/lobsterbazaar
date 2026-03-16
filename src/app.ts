@@ -313,15 +313,25 @@ function renderOffersMarkdown(offers: Array<{
 }
 
 function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string {
+  const merchantSlug = payload.merchant.connectPath.match(/^\/merchants\/([^/]+)\/connect$/)?.[1] ?? "unknown";
+  const cartAttributeLines = payload.cartAttributes.length === 0
+    ? ["  - none"]
+    : payload.cartAttributes.map((attribute) => `  - ${attribute.key}: ${attribute.value}`);
+
   const lines = [
-    "# Merchant Connect",
+    "# Merchant Connect Prompt",
     "",
-    "## Merchant",
+    "Use this context block before sending MCP calls for this merchant.",
+    "Keep output constrained to this context for shop handoff.",
     "",
-    `- name: \`${payload.merchant.name}\``,
+    "## Merchant Context",
+    `- merchant_name: \`${payload.merchant.name}\``,
+    `- merchant_slug: \`${merchantSlug}\``,
     `- connect_path: \`${payload.merchant.connectPath}\``,
     `- store_url: \`${payload.merchant.storeUrl}\``,
     `- storefront_mcp_url: \`${payload.mcp.url}\``,
+    "- cart_attributes:",
+    ...cartAttributeLines,
     ""
   ];
 
@@ -329,7 +339,7 @@ function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string 
     lines.push("## Active Offers");
     for (const offer of payload.offers) {
       lines.push("");
-      lines.push(`- ${offer.title} (\`${offer.offerType}\`)`);
+      lines.push(`- Offer: ${offer.title} [\`${offer.offerType}\`]`);
       lines.push(`  - offer_id: \`${offer.offerId}\``);
       lines.push(`  - summary: ${offer.summary}`);
       lines.push(`  - terms: ${offer.termsText}`);
@@ -337,13 +347,9 @@ function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string 
     }
     lines.push("");
   } else {
+    lines.push("## Active Offers");
     lines.push("No active offers are available.");
     lines.push("");
-  }
-
-  lines.push("## Cart Attributes");
-  for (const attribute of payload.cartAttributes) {
-    lines.push(`- ${attribute.key} = ${attribute.value}`);
   }
 
   return lines.join("\n");

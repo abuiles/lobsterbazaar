@@ -274,14 +274,16 @@ describe("lobsterbazaar worker", () => {
     const { response, body } = await requestText(app, "/merchants/claimed-roaster/connect.md");
 
     expect(response.status).toBe(200);
-    expect(body).toContain("# Merchant Connect");
-    expect(body).toContain("- name: `Claimed Roaster`");
+    expect(body).toContain("# Merchant Connect Prompt");
+    expect(body).toContain("Use this context block before sending MCP calls for this merchant.");
+    expect(body).toContain("merchant_name: `Claimed Roaster`");
+    expect(body).toContain("merchant_slug: `claimed-roaster`");
     expect(body).toContain("connect_path: `/merchants/claimed-roaster/connect`");
     expect(body).toContain("store_url: `https://claimed-roaster.com`");
     expect(body).toContain("storefront_mcp_url: `https://claimed-roaster.myshopify.com/api/mcp`");
     expect(body).toContain("10% off first order");
-    expect(body).not.toContain("notes");
-    expect(body).toContain("lb_source__ = lobsterbrew");
+    expect(body).toContain("cart_attributes:");
+    expect(body).toContain("lb_source__: lobsterbrew");
   });
 
   it("renders the generated skill markdown", async () => {

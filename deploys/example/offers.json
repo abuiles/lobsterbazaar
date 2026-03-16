@@ -1,0 +1,19 @@
+[
+  {
+    "offer_id": "offer_sample",
+    "merchant_slug": "sample-roaster",
+    "title": "10% off first order",
+    "summary": "First-time buyers get 10% off selected coffees.",
+    "country_codes": ["US", "CA"],
+    "active_from": "2026-03-01T00:00:00Z",
+    "valid_through": "2026-04-15T23:59:59Z",
+    "offer_type": "discount_code",
+    "terms_text": "Valid for first order only.",
+    "priority": 100,
+    "offer_code": "HELLOLOBSTER",
+    "status": "active",
+    "vertical_metadata": {
+      "applies_to": "first_order"
+    }
+  }
+]

@@ -1,7 +1,7 @@
 ---
 title: feat: Build LobsterBazaar V0 Directory And MCP Handoff
 type: feat
-status: active
+status: completed
 date: 2026-03-15
 ---
 
@@ -383,25 +383,25 @@ erDiagram
 
 ### Functional Requirements
 
-- [ ] One deploy config and merchant manifest can generate public artifacts and a deploy-specific `skill.md`
-- [ ] `POST /claws/register` creates a claw and returns a one-time API key
-- [ ] `GET /countries/{country_code}` returns merchants ranked with active offers first
-- [ ] `GET /offers/{country_code}` returns active offers only
-- [ ] `GET /merchants/{slug}/connect` returns one resolved MCP endpoint and `lb_source__`
-- [ ] Merchant discovery does not depend on merchant claim
-- [ ] Only claimed merchants can publish offers
+- [x] One deploy config and merchant manifest can generate public artifacts and a deploy-specific `skill.md`
+- [x] `POST /claws/register` creates a claw and returns a one-time API key
+- [x] `GET /countries/{country_code}` returns merchants ranked with active offers first
+- [x] `GET /offers/{country_code}` returns active offers only
+- [x] `GET /merchants/{slug}/connect` returns one resolved MCP endpoint and `lb_source__`
+- [x] Merchant discovery does not depend on merchant claim
+- [x] Only claimed merchants can publish offers
 
 ### Non-Functional Requirements
 
-- [ ] Keep the runtime small enough to fit the `R2 + D1 + Worker` boundary
-- [ ] Avoid storing preferences or purchase history in the service
-- [ ] Keep endpoint contracts stable enough for generated `skill.md`
+- [x] Keep the runtime small enough to fit the `R2 + D1 + Worker` boundary
+- [x] Avoid storing preferences or purchase history in the service
+- [x] Keep endpoint contracts stable enough for generated `skill.md`
 
 ### Quality Gates
 
-- [ ] Generated `skill.md` matches the implemented API contract
-- [ ] Example deploy artifacts can be regenerated deterministically
-- [ ] At least one integration-style test exists for each V0 endpoint
+- [x] Generated `skill.md` matches the implemented API contract
+- [x] Example deploy artifacts can be regenerated deterministically
+- [x] At least one integration-style test exists for each V0 endpoint
 
 ## Success Metrics
 

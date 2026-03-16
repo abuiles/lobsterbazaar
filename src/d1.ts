@@ -372,6 +372,10 @@ export class D1Repositories implements Repositories {
       throw notFound("Merchant not found");
     }
 
+    if (merchant.claimStatus !== "claimed" || !(await this.hasOperatorManagedAccess(input.merchantSlug))) {
+      throw conflict("Only claimed merchants can publish offers");
+    }
+
     const now = new Date().toISOString();
     const createdAt = input.createdAt ?? now;
     const updatedAt = input.updatedAt ?? now;

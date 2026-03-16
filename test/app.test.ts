@@ -108,7 +108,10 @@ describe("lobsterbazaar worker", () => {
   });
 
   it("rejects merchant claw registration without operator-managed claim access", async () => {
-    const { app } = await createTestHarness();
+    const { app } = await createTestHarness({
+      includeClaimAccess: false,
+      includeSeedOffers: false
+    });
 
     const { response, body } = await requestJson<ErrorResponse>(app, "/claws/register", {
       method: "POST",
@@ -127,14 +130,7 @@ describe("lobsterbazaar worker", () => {
   });
 
   it("registers merchant claws when operator-managed claim access exists", async () => {
-    const { app, repositories } = await createTestHarness();
-    await repositories.putClaim({
-      claimId: "claim_claimed_roaster",
-      merchantSlug: "claimed-roaster",
-      status: "claimed",
-      contact: "ops@claimed-roaster.com",
-      note: "Operator approved access."
-    });
+    const { app } = await createTestHarness();
 
     const { response, body } = await requestJson<RegisterResponse>(app, "/claws/register", {
       method: "POST",
@@ -254,8 +250,16 @@ describe("lobsterbazaar worker", () => {
       notes: "Freshly imported for rematerialization coverage.",
       tags: ["coffee"],
       claimContact: "hello@fresh-roaster.com",
-      claimStatus: "unclaimed",
+      claimStatus: "claimed",
       verticalMetadata: {}
+    });
+
+    await repositories.putClaim({
+      claimId: "claim_fresh_roaster",
+      merchantSlug: "fresh-roaster",
+      status: "claimed",
+      contact: "hello@fresh-roaster.com",
+      note: "Operator approved access."
     });
 
     await repositories.putOffer({

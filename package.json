@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build:deploy:artifacts": "node --import tsx/esm scripts/materialize-deploy.ts",
+    "build:deploy:sql": "node --import tsx/esm scripts/build-deploy-sql.ts",
     "check": "npm run typecheck && npm run test",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
@@ -13,9 +15,10 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260303.0",
+    "@types/node": "^24.5.2",
     "typescript": "^5.8.2",
+    "tsx": "^4.20.5",
     "vitest": "^3.2.4",
     "wrangler": "^4.6.0"
   }
 }
-

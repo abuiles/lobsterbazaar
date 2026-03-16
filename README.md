@@ -40,6 +40,23 @@ The Worker currently provides:
 
 `D1` is the control plane. `R2` is the public artifact plane.
 
+## Example deploy package
+
+The repo now includes a deploy package at [`deploys/example`](./deploys/example):
+
+- [`config.json`](./deploys/example/config.json)
+- [`merchants.csv`](./deploys/example/merchants.csv)
+- [`offers.json`](./deploys/example/offers.json)
+
+That package is the canonical local example for:
+
+- deploy config loading
+- merchant manifest parsing
+- claim import
+- offer import
+- deterministic SQL generation
+- deterministic artifact materialization
+
 ## Local work
 
 ```bash
@@ -72,3 +89,30 @@ curl http://127.0.0.1:8787/countries/US
 curl http://127.0.0.1:8787/offers/US
 curl http://127.0.0.1:8787/merchants/sample-roaster/connect
 ```
+
+## Deploy import workflow
+
+Generate deterministic SQL from a deploy package:
+
+```bash
+npm run build:deploy:sql -- deploys/example > build/example.sql
+```
+
+Load that SQL into local D1:
+
+```bash
+npx wrangler d1 execute lobsterbazaar --local --file build/example.sql
+```
+
+Generate local review artifacts from the same deploy package:
+
+```bash
+npm run build:deploy:artifacts -- deploys/example build/example
+```
+
+That writes:
+
+- `build/example/skill.md`
+- `build/example/countries/*.json`
+- `build/example/offers/*.json`
+- `build/example/merchants/*.json`

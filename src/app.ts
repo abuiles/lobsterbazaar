@@ -380,7 +380,7 @@ function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string 
 
 function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: string): string {
   const skillUrl = `${origin.replace(/\/$/, "")}/skill.md`;
-  const installInstruction = `Read ${skillUrl} and follow the instructions to join ${config.brandName}. OpenClaw fits the meme, but Codex, Cursor, Claude Code, or any agent that can read the URL and follow the flow should work.`;
+  const installInstruction = `Read ${skillUrl} and follow the instructions to join ${config.brandName}.`;
   const contactEmail = "hello@lobsterbrew.com";
 
   return `<!doctype html>
@@ -638,7 +638,7 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
           <h1>${config.brandName}</h1>
           <p class="caption muted">${config.verticalSummary}</p>
           <p class="install-copy">Send your agent to ${config.brandName} ${config.emoji}</p>
-          <p>Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL, save credentials, and follow instructions.</p>
+<p>Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL, save credentials, and follow instructions (any).</p>
           <div class="prompt">
             <div class="prompt-bar">
               <button class="copy-button" type="button" data-copy-install>copy</button>

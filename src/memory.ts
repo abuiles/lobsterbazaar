@@ -76,6 +76,10 @@ export class MemoryRepositories implements Repositories {
       if (merchant.claimStatus !== "claimed") {
         throw conflict("Merchant registration is not allowed");
       }
+
+      if (!this.hasOperatorManagedAccess(merchant.slug)) {
+        throw conflict("Merchant registration is not allowed");
+      }
     }
 
     const apiKey = createApiKey(deployId);
@@ -113,6 +117,11 @@ export class MemoryRepositories implements Repositories {
         activeOffersCount: activeCounts.get(merchant.slug) ?? 0
       }))
       .sort(compareCountryMerchants);
+  }
+
+  async supportsCountry(countryCode: string): Promise<boolean> {
+    const normalized = normalizeCountryCode(countryCode);
+    return Array.from(this.merchants.values()).some((merchant) => merchant.countryCodes.includes(normalized));
   }
 
   async listActiveOffers(countryCode: string, now: string): Promise<PublicOffer[]> {
@@ -203,6 +212,14 @@ export class MemoryRepositories implements Repositories {
 
   async listClaws(): Promise<Claw[]> {
     return Array.from(this.claws.values());
+  }
+
+  private hasOperatorManagedAccess(merchantSlug: string): boolean {
+    const latestClaim = Array.from(this.claims.values())
+      .filter((claim) => claim.merchantSlug === merchantSlug)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+
+    return latestClaim?.status === "claimed" || latestClaim?.status === "approved";
   }
 
   private async listActiveOfferCounts(countryCode: string | undefined, now: string): Promise<Map<string, number>> {

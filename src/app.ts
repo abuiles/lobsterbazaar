@@ -63,16 +63,16 @@ export function createApp(dependencies: AppDependencies) {
         const countryMatch = pathname.match(/^\/countries\/([A-Za-z]{2,3})$/);
         if (countryMatch && isMethod(request, "GET")) {
           const countryCode = normalizeCountryCode(countryMatch[1] ?? "");
+          if (!(await dependencies.repositories.supportsCountry(countryCode))) {
+            throw notFound("Country not found");
+          }
+
           const artifact = await ensureCountryArtifact(
             dependencies.artifacts,
             dependencies.repositories,
             countryCode,
             dependencies.now()
           );
-
-          if (artifact.merchants.length === 0) {
-            throw notFound("Country not found");
-          }
 
           return json({
             country_code: artifact.countryCode,
@@ -91,6 +91,10 @@ export function createApp(dependencies: AppDependencies) {
         const offersMatch = pathname.match(/^\/offers\/([A-Za-z]{2,3})$/);
         if (offersMatch && isMethod(request, "GET")) {
           const countryCode = normalizeCountryCode(offersMatch[1] ?? "");
+          if (!(await dependencies.repositories.supportsCountry(countryCode))) {
+            throw notFound("Country not found");
+          }
+
           const artifact = await ensureOffersArtifact(
             dependencies.artifacts,
             dependencies.repositories,

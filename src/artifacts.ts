@@ -7,6 +7,30 @@ import type {
 import type { ArtifactStore, Repositories } from "./storage";
 import { renderSkillTemplate } from "./skill";
 
+async function buildCountryArtifact(
+  repositories: Repositories,
+  countryCode: string,
+  now: string
+): Promise<CountryArtifact> {
+  return {
+    countryCode,
+    generatedAt: now,
+    merchants: await repositories.listCountryMerchants(countryCode, now)
+  };
+}
+
+async function buildOffersArtifact(
+  repositories: Repositories,
+  countryCode: string,
+  now: string
+): Promise<OffersArtifact> {
+  return {
+    countryCode,
+    generatedAt: now,
+    offers: await repositories.listActiveOffers(countryCode, now)
+  };
+}
+
 export async function ensureCountryArtifact(
   artifacts: ArtifactStore,
   repositories: Repositories,
@@ -18,12 +42,7 @@ export async function ensureCountryArtifact(
     return cached;
   }
 
-  const artifact: CountryArtifact = {
-    countryCode,
-    generatedAt: now,
-    merchants: await repositories.listCountryMerchants(countryCode, now)
-  };
-
+  const artifact = await buildCountryArtifact(repositories, countryCode, now);
   await artifacts.putCountry(artifact);
   return artifact;
 }
@@ -39,12 +58,7 @@ export async function ensureOffersArtifact(
     return cached;
   }
 
-  const artifact: OffersArtifact = {
-    countryCode,
-    generatedAt: now,
-    offers: await repositories.listActiveOffers(countryCode, now)
-  };
-
+  const artifact = await buildOffersArtifact(repositories, countryCode, now);
   await artifacts.putOffers(artifact);
   return artifact;
 }
@@ -97,11 +111,10 @@ export async function materializePublicArtifacts(
 
   await Promise.all([
     ...countryCodes.flatMap((countryCode) => [
-      ensureCountryArtifact(artifacts, repositories, countryCode, now),
-      ensureOffersArtifact(artifacts, repositories, countryCode, now)
+      buildCountryArtifact(repositories, countryCode, now).then((artifact) => artifacts.putCountry(artifact)),
+      buildOffersArtifact(repositories, countryCode, now).then((artifact) => artifacts.putOffers(artifact))
     ]),
     ...merchants.map((merchant) => artifacts.putMerchant(merchant)),
     artifacts.putSkill(renderSkillTemplate(templateInput))
   ]);
 }
-

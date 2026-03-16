@@ -41,6 +41,7 @@ export interface CreateClaimInput extends Omit<MerchantClaim, "createdAt" | "upd
 export interface Repositories {
   createClaw(input: RegisterClawInput, deployId: string): Promise<RegisterClawResult>;
   getMerchant(slug: string): Promise<Merchant | null>;
+  supportsCountry(countryCode: string): Promise<boolean>;
   listCountryMerchants(countryCode: string, now: string): Promise<CountryMerchantSummary[]>;
   listActiveOffers(countryCode: string, now: string): Promise<PublicOffer[]>;
   listMerchantArtifacts(now: string): Promise<MerchantArtifact[]>;

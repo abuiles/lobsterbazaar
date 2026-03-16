@@ -107,6 +107,52 @@ describe("lobsterbazaar worker", () => {
     expect(body.error.code).toBe("conflict");
   });
 
+  it("rejects merchant claw registration without operator-managed claim access", async () => {
+    const { app } = await createTestHarness();
+
+    const { response, body } = await requestJson<ErrorResponse>(app, "/claws/register", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        role: "merchant",
+        display_name: "merchant claw",
+        merchant_slug: "claimed-roaster"
+      })
+    });
+
+    expect(response.status).toBe(409);
+    expect(body.error.code).toBe("conflict");
+  });
+
+  it("registers merchant claws when operator-managed claim access exists", async () => {
+    const { app, repositories } = await createTestHarness();
+    await repositories.putClaim({
+      claimId: "claim_claimed_roaster",
+      merchantSlug: "claimed-roaster",
+      status: "claimed",
+      contact: "ops@claimed-roaster.com",
+      note: "Operator approved access."
+    });
+
+    const { response, body } = await requestJson<RegisterResponse>(app, "/claws/register", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        role: "merchant",
+        display_name: "merchant claw",
+        merchant_slug: "claimed-roaster"
+      })
+    });
+
+    expect(response.status).toBe(201);
+    expect(body.claw.role).toBe("merchant");
+    expect(body.claw.display_name).toBe("merchant claw");
+  });
+
   it("orders country merchants with active offers first", async () => {
     const { app } = await createTestHarness();
 
@@ -132,6 +178,18 @@ describe("lobsterbazaar worker", () => {
     const [firstOffer] = body.offers;
     expect(firstOffer?.offer_id).toBe("offer_active");
     expect(firstOffer?.merchant_slug).toBe("claimed-roaster");
+  });
+
+  it("returns 404 and skips artifact creation for unsupported countries", async () => {
+    const { app, artifacts } = await createTestHarness();
+
+    const unsupportedCountryResponse = await requestJson<ErrorResponse>(app, "/countries/ZZ");
+    const unsupportedOffersResponse = await requestJson<ErrorResponse>(app, "/offers/ZZ");
+
+    expect(unsupportedCountryResponse.response.status).toBe(404);
+    expect(unsupportedOffersResponse.response.status).toBe(404);
+    expect(await artifacts.getCountry("ZZ")).toBeNull();
+    expect(await artifacts.getOffers("ZZ")).toBeNull();
   });
 
   it("returns merchant MCP connect payload with lb_source__", async () => {
@@ -164,5 +222,77 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("# Lobster Bazaar Skill");
     expect(body).toContain("POST to `https://lobsterbrew.test/claws/register`");
     expect(body).toContain("lb_source__ = lobsterbrew");
+  });
+
+  it("rematerializes cached country and offers artifacts with fresh repository data", async () => {
+    const { app, artifacts, repositories } = await createTestHarness();
+
+    const firstResponse = await app.fetch(
+      new Request("https://lobsterbrew.test/internal/materialize", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-operator-token"
+        }
+      })
+    );
+
+    expect(firstResponse.status).toBe(200);
+    expect((await artifacts.getCountry("US"))?.merchants.map((merchant) => merchant.slug)).toEqual([
+      "claimed-roaster",
+      "sample-roaster"
+    ]);
+    expect((await artifacts.getOffers("US"))?.offers.map((offer) => offer.offerId)).toEqual(["offer_active"]);
+
+    await repositories.putMerchant({
+      slug: "fresh-roaster",
+      displayName: "Fresh Roaster",
+      storeUrl: "https://fresh-roaster.com",
+      storeDomain: "fresh-roaster.myshopify.com",
+      storefrontMcpUrl: undefined,
+      countryCodes: ["US"],
+      locationsSummary: "2 cafes",
+      notes: "Freshly imported for rematerialization coverage.",
+      tags: ["coffee"],
+      claimContact: "hello@fresh-roaster.com",
+      claimStatus: "unclaimed",
+      verticalMetadata: {}
+    });
+
+    await repositories.putOffer({
+      offerId: "offer_fresh",
+      merchantSlug: "fresh-roaster",
+      title: "Free shipping",
+      summary: "Free shipping on two bags or more.",
+      countryCodes: ["US"],
+      activeFrom: "2026-03-10T00:00:00Z",
+      validThrough: "2026-04-10T00:00:00Z",
+      offerType: "free_shipping",
+      termsText: "Applies to domestic orders only.",
+      priority: 75,
+      publicProofUrl: undefined,
+      offerCode: undefined,
+      status: "active",
+      verticalMetadata: {}
+    });
+
+    const secondResponse = await app.fetch(
+      new Request("https://lobsterbrew.test/internal/materialize", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-operator-token"
+        }
+      })
+    );
+
+    expect(secondResponse.status).toBe(200);
+    expect((await artifacts.getCountry("US"))?.merchants.map((merchant) => merchant.slug)).toEqual([
+      "claimed-roaster",
+      "fresh-roaster",
+      "sample-roaster"
+    ]);
+    expect((await artifacts.getOffers("US"))?.offers.map((offer) => offer.offerId)).toEqual([
+      "offer_fresh",
+      "offer_active"
+    ]);
   });
 });

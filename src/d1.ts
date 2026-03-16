@@ -69,6 +69,10 @@ interface ClawRow {
   created_at: string;
 }
 
+interface ClaimStatusRow {
+  status: string;
+}
+
 function parseJson<T>(value: string): T {
   return JSON.parse(value) as T;
 }
@@ -119,6 +123,10 @@ export class D1Repositories implements Repositories {
       }
 
       if (merchant.claimStatus !== "claimed") {
+        throw conflict("Merchant registration is not allowed");
+      }
+
+      if (!(await this.hasOperatorManagedAccess(merchant.slug))) {
         throw conflict("Merchant registration is not allowed");
       }
     }
@@ -213,6 +221,21 @@ export class D1Repositories implements Repositories {
       .sort(compareCountryMerchants);
   }
 
+  async supportsCountry(countryCode: string): Promise<boolean> {
+    const normalized = normalizeCountryCode(countryCode);
+    const row = await this.db
+      .prepare(
+        `SELECT 1 AS supported
+         FROM merchant_countries
+         WHERE country_code = ?1
+         LIMIT 1`
+      )
+      .bind(normalized)
+      .first<{ supported: number }>();
+
+    return row !== null;
+  }
+
   async listActiveOffers(countryCode: string, now: string): Promise<PublicOffer[]> {
     const normalized = normalizeCountryCode(countryCode);
     const result = await this.db
@@ -303,9 +326,21 @@ export class D1Repositories implements Repositories {
     await this.db.batch([
       this.db
         .prepare(
-          `INSERT OR REPLACE INTO merchants
+          `INSERT INTO merchants
              (slug, display_name, store_url, store_domain, storefront_mcp_url, locations_summary, notes, tags_json, claim_contact, claim_status, vertical_metadata_json, created_at, updated_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+           ON CONFLICT(slug) DO UPDATE SET
+             display_name = excluded.display_name,
+             store_url = excluded.store_url,
+             store_domain = excluded.store_domain,
+             storefront_mcp_url = excluded.storefront_mcp_url,
+             locations_summary = excluded.locations_summary,
+             notes = excluded.notes,
+             tags_json = excluded.tags_json,
+             claim_contact = excluded.claim_contact,
+             claim_status = excluded.claim_status,
+             vertical_metadata_json = excluded.vertical_metadata_json,
+             updated_at = excluded.updated_at`
         )
         .bind(
           input.slug,
@@ -423,5 +458,19 @@ export class D1Repositories implements Repositories {
 
     return (result.results ?? []).map((row) => row.country_code);
   }
-}
 
+  private async hasOperatorManagedAccess(merchantSlug: string): Promise<boolean> {
+    const latestClaim = await this.db
+      .prepare(
+        `SELECT status
+         FROM merchant_claims
+         WHERE merchant_slug = ?1
+         ORDER BY updated_at DESC, created_at DESC
+         LIMIT 1`
+      )
+      .bind(merchantSlug)
+      .first<ClaimStatusRow>();
+
+    return latestClaim?.status === "claimed" || latestClaim?.status === "approved";
+  }
+}

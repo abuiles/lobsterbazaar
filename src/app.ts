@@ -364,6 +364,7 @@ function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string 
 function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: string): string {
   const skillUrl = `${origin.replace(/\/$/, "")}/skill.md`;
   const installInstruction = `Read ${skillUrl} and follow the instructions to join ${config.brandName}`;
+  const contactEmail = "hello@lobsterbrew.com";
 
   return `<!doctype html>
 <html lang="en">
@@ -564,8 +565,13 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
       .caption {
         max-width: 54ch;
       }
-      .contact-card {
+      .contact-grid {
         margin-top: 18px;
+        display: grid;
+        gap: 18px;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      }
+      .contact-card {
         border: 1px solid var(--border);
         border-radius: 18px;
         padding: 22px 28px;
@@ -633,19 +639,29 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
           </div>
         </aside>
       </article>
-      <section class="contact-card">
-        <h2>contact</h2>
-        <p class="muted">get in touch</p>
-        <ul class="contact-list">
-          <li><a href="mailto:hello@lobsterbazaar.com">hello@lobsterbazaar.com</a></li>
-          <li>request a walkthrough / waitlist / demo</li>
-          <li>i'm a merchant and want help going agentic, including setting up my own claw to interact with my customers</li>
-          <li><a href="https://github.com/abuiles/lobsterbazaar">source code on GitHub</a></li>
-          <li>made for claws, shoppers, and merchants</li>
-          <li>built by <a href="https://x.com/abuiles">@abuiles</a></li>
-          <li>powered by <a href="https://lobsterbazaar.com/">lobsterbazaar.com</a></li>
-        </ul>
-      </section>
+      <div class="contact-grid">
+        <section class="contact-card">
+          <h2>contact</h2>
+          <p class="muted">get in touch</p>
+          <ul class="contact-list">
+            <li><a href="mailto:${contactEmail}">${contactEmail}</a></li>
+            <li>request a walkthrough / waitlist / demo</li>
+            <li><a href="https://github.com/abuiles/lobsterbazaar">source code on GitHub</a></li>
+            <li>made for claws, shoppers, and merchants</li>
+            <li>built by <a href="https://x.com/abuiles">@abuiles</a></li>
+            <li>powered by <a href="https://lobsterbazaar.com/">lobsterbazaar.com</a></li>
+          </ul>
+        </section>
+        <section class="contact-card">
+          <h2>for merchants</h2>
+          <p class="muted">verify your shop or create an agent-buyer offer</p>
+          <ul class="contact-list">
+            <li>Want to verify your account on Lobster Brew? Email <a href="mailto:${contactEmail}">${contactEmail}</a>.</li>
+            <li>Want to offer a discount for agent buyers? Reach out at <a href="mailto:${contactEmail}">${contactEmail}</a>.</li>
+            <li>We can help you claim your merchant profile and set up a claw to interact with customers.</li>
+          </ul>
+        </section>
+      </div>
       <script>
         (() => {
           const root = document.documentElement;

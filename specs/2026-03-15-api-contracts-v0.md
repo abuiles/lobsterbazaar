@@ -291,13 +291,11 @@ GET /merchants/sample-roaster/connect
 ```json
 {
   "merchant": {
-    "slug": "sample-roaster",
-    "display_name": "Sample Roaster",
+    "name": "Sample Roaster",
     "store_url": "https://sample-roaster.com"
   },
   "mcp": {
-    "url": "https://sample-roaster.myshopify.com/api/mcp",
-    "resolution": "store_domain"
+    "url": "https://sample-roaster.myshopify.com/api/mcp"
   },
   "cart_attributes": [
     {
@@ -305,7 +303,16 @@ GET /merchants/sample-roaster/connect
       "value": "{deploy_id}"
     }
   ],
-  "notes": "Use merchant MCP for catalog, cart, and checkout."
+  "offers": [
+    {
+      "offer_id": "offer_xxx",
+      "title": "10% off first order",
+      "summary": "First-time buyers get 10% off selected coffees.",
+      "offer_type": "discount_code",
+      "valid_through": "2026-04-15T23:59:59Z",
+      "terms_text": "Valid for first order only."
+    }
+  ]
 }
 ```
 
@@ -313,13 +320,11 @@ GET /merchants/sample-roaster/connect
 
 | Field | Type | Notes |
 |---|---|---|
-| `merchant.slug` | string | Merchant route ID |
-| `merchant.display_name` | string | Public merchant name |
+| `merchant.name` | string | Public merchant name |
 | `merchant.store_url` | string | Canonical merchant URL |
 | `mcp.url` | string | Resolved Storefront MCP endpoint |
-| `mcp.resolution` | string | `explicit`, `store_domain`, or `store_url_host` |
 | `cart_attributes` | array | Attributes the claw must attach |
-| `notes` | string | Short instruction hint |
+| `offers` | array | Active offers for the merchant |
 
 ### Resolution rule
 

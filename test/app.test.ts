@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createTestHarness, requestJson } from "./helpers";
+import { createTestHarness, requestJson, requestText } from "./helpers";
 
 interface RegisterResponse {
   claw: {
@@ -32,6 +32,11 @@ interface CountryResponse {
   }>;
 }
 
+interface CountriesResponse {
+  generated_at: string;
+  countries: string[];
+}
+
 interface OffersResponse {
   country_code: string;
   generated_at: string;
@@ -49,8 +54,7 @@ interface OffersResponse {
 
 interface MerchantConnectResponse {
   merchant: {
-    slug: string;
-    display_name: string;
+    name: string;
     store_url: string;
   };
   mcp: {
@@ -59,6 +63,14 @@ interface MerchantConnectResponse {
   cart_attributes: Array<{
     key: string;
     value: string;
+  }>;
+  offers: Array<{
+    offer_id: string;
+    title: string;
+    summary: string;
+    offer_type: string;
+    valid_through: string;
+    terms_text: string;
   }>;
 }
 
@@ -176,6 +188,37 @@ describe("lobsterbazaar worker", () => {
     expect(firstOffer?.merchant_slug).toBe("claimed-roaster");
   });
 
+  it("returns all available countries", async () => {
+    const { app } = await createTestHarness();
+
+    const { response, body } = await requestJson<CountriesResponse>(app, "/countries");
+
+    expect(response.status).toBe(200);
+    expect(body.generated_at).toBe("2026-03-15T12:00:00Z");
+    expect(body.countries).toEqual(["CA", "US"]);
+  });
+
+  it("returns available countries as markdown", async () => {
+    const { app } = await createTestHarness();
+
+    const { response, body } = await requestText(app, "/countries.md");
+
+    expect(response.status).toBe(200);
+    expect(body).toContain("# Available Countries");
+    expect(body).toContain("- CA");
+    expect(body).toContain("- US");
+  });
+
+  it("returns country offers as markdown", async () => {
+    const { app } = await createTestHarness();
+
+    const { response, body } = await requestText(app, "/offers/US.md");
+
+    expect(response.status).toBe(200);
+    expect(body).toContain("# Active Offers in US");
+    expect(body).toContain("10% off first order");
+  });
+
   it("returns 404 and skips artifact creation for unsupported countries", async () => {
     const { app, artifacts } = await createTestHarness();
 
@@ -197,14 +240,31 @@ describe("lobsterbazaar worker", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(body.merchant.slug).toBe("claimed-roaster");
+    expect(body.merchant.name).toBe("Claimed Roaster");
     expect(body.mcp.url).toBe("https://claimed-roaster.myshopify.com/api/mcp");
+    expect(body.offers).toHaveLength(1);
+    expect(body.offers[0]?.offer_id).toBe("offer_active");
     expect(body.cart_attributes).toEqual([
       {
         key: "lb_source__",
         value: "lobsterbrew"
       }
     ]);
+  });
+
+  it("returns a minimal connect markdown payload with active offers", async () => {
+    const { app } = await createTestHarness();
+
+    const { response, body } = await requestText(app, "/merchants/claimed-roaster/connect.md");
+
+    expect(response.status).toBe(200);
+    expect(body).toContain("# Merchant Connect");
+    expect(body).toContain("- name: `Claimed Roaster`");
+    expect(body).toContain("store_url: `https://claimed-roaster.com`");
+    expect(body).toContain("storefront_mcp_url: `https://claimed-roaster.myshopify.com/api/mcp`");
+    expect(body).toContain("10% off first order");
+    expect(body).not.toContain("notes");
+    expect(body).toContain("lb_source__ = lobsterbrew");
   });
 
   it("renders the generated skill markdown", async () => {

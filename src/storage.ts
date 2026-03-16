@@ -44,6 +44,7 @@ export interface Repositories {
   supportsCountry(countryCode: string): Promise<boolean>;
   listCountryMerchants(countryCode: string, now: string): Promise<CountryMerchantSummary[]>;
   listActiveOffers(countryCode: string, now: string): Promise<PublicOffer[]>;
+  listActiveOffersForMerchant(merchantSlug: string, now: string): Promise<PublicOffer[]>;
   listMerchantArtifacts(now: string): Promise<MerchantArtifact[]>;
   listCountryCodes(): Promise<string[]>;
   listMerchantSlugs(): Promise<string[]>;

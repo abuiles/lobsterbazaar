@@ -2,8 +2,12 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "lobsterbazaar",
   "main": "src/index.ts",
+  "preview_urls": true,
   "compatibility_date": "2026-03-15",
   "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
   "vars": {
     "DEPLOY_ID": "lobsterbazaar",
     "BRAND_NAME": "Lobster Bazaar",
@@ -14,7 +18,7 @@
     {
       "binding": "DB",
       "database_name": "lobsterbazaar",
-      "database_id": "local-lobsterbazaar-db"
+      "database_id": "${DB_ID}"
     }
   ],
   "r2_buckets": [
@@ -24,4 +28,3 @@
     }
   ]
 }
-

@@ -1,0 +1,21 @@
+{
+  "name": "lobsterbazaar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "npm run typecheck && npm run test",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260303.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.6.0"
+  }
+}
+

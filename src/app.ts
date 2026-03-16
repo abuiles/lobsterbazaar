@@ -383,7 +383,7 @@ function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string 
 function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: string): string {
   const skillUrl = `${origin.replace(/\/$/, "")}/skill.md`;
   const installInstruction = `Read ${skillUrl} and follow the instructions to join ${config.brandName}.`;
-  const contactEmail = "hello@lobsterbrew.com";
+  const contactEmail = "hello@lobsterstores.com";
 
   return `<!doctype html>
 <html lang="en">

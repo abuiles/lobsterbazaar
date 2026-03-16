@@ -238,7 +238,7 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("Let the agent register once and save its key");
     expect(body).toContain("host-agnostic install surface:");
     expect(body).toContain("toggle theme");
-    expect(body).toContain("hello@lobsterbrew.com");
+    expect(body).toContain("hello@lobsterstores.com");
     expect(body).toContain("source code on GitHub");
     expect(body).toContain("powered by");
     expect(body).toContain('/assets/mascots/lobsterbazaar-default.jpg');

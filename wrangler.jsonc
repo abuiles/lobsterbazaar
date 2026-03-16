@@ -16,7 +16,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "lobsterbazaar"
+      "database_name": "lobsterbazaar",
+      "database_id": "93768a85-e0e1-4082-bd39-04a3d8ad87be"
     }
   ],
   "r2_buckets": [

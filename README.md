@@ -1,32 +1,32 @@
 # LobsterBazaar
 
+![LobsterBazaar mascot](./public/assets/mascots/lobsterbazaar-default.jpg)
+
 `lobsterbazaar` is a lightweight Cloudflare Worker engine for agent-facing merchant discovery, Storefront MCP handoff, and checkout-boundary cart orchestration.
 
-The repo now contains both the V0 specs and the first runnable implementation skeleton.
+It is the reusable marketplace layer behind deploys like Lobster Brew. A buyer-side agent can use it to discover merchants, inspect active offers, resolve the right merchant MCP endpoint, build a cart, and hand checkout back to the human owner.
 
-## Docs
+## What it does
 
-- [System Map V0](./specs/2026-03-15-system-map-v0.md)
-- [Object Model V0](./specs/2026-03-15-object-model-v0.md)
-- [BYO Merchant Deploy Model](./specs/2026-03-15-byo-merchant-deploy-model.md)
-- [Merchant Manifest And Offer Schema](./specs/2026-03-15-merchant-manifest-and-offer-schema.md)
-- [Buyer Claw Request Flow](./specs/2026-03-15-buyer-claw-request-flow.md)
-- [Agent Bootstrap Skill V0](./specs/2026-03-15-agent-bootstrap-skill-v0.md)
-- [API Contracts V0](./specs/2026-03-15-api-contracts-v0.md)
-- [V0 Build Plan](./plans/2026-03-15-feat-lobsterbazaar-v0-directory-mcp-handoff-plan.md)
+`lobsterbazaar` owns the directory and routing layer, not the merchant catalog itself.
 
-## Reading order
+- Publishes an agent-readable `skill.md` install surface
+- Registers buyer and merchant claws
+- Serves country-based merchant discovery and offer discovery
+- Resolves a merchant's Storefront MCP endpoint
+- Returns cart attribution rules so merchants can trace claw-driven handoffs
 
-1. System map
-2. Object model
-3. BYO merchant deploy model
-4. Merchant manifest and offer schema
-5. Buyer claw request flow
-6. Agent bootstrap skill
-7. API contracts
-8. V0 build plan
+The merchant remains the source of truth for catalog, inventory, cart state, and checkout URLs.
 
-## Runtime
+## How it works
+
+1. A claw reads `GET /skill.md` and registers with `POST /claws/register`.
+2. The claw discovers merchants and offers through country-based artifacts.
+3. The claw selects a merchant and requests `GET /merchants/{slug}/connect`.
+4. The merchant's Shopify Storefront MCP handles catalog search, cart updates, and checkout URL generation.
+5. The claw returns the checkout URL to the human for approval and payment.
+
+## Runtime surface
 
 The Worker currently provides:
 
@@ -40,9 +40,31 @@ The Worker currently provides:
 
 `D1` is the control plane. `R2` is the public artifact plane.
 
+## Specs and docs
+
+- [System Map V0](./specs/2026-03-15-system-map-v0.md)
+- [Object Model V0](./specs/2026-03-15-object-model-v0.md)
+- [BYO Merchant Deploy Model](./specs/2026-03-15-byo-merchant-deploy-model.md)
+- [Merchant Manifest And Offer Schema](./specs/2026-03-15-merchant-manifest-and-offer-schema.md)
+- [Buyer Claw Request Flow](./specs/2026-03-15-buyer-claw-request-flow.md)
+- [Agent Bootstrap Skill V0](./specs/2026-03-15-agent-bootstrap-skill-v0.md)
+- [API Contracts V0](./specs/2026-03-15-api-contracts-v0.md)
+- [V0 Build Plan](./plans/2026-03-15-feat-lobsterbazaar-v0-directory-mcp-handoff-plan.md)
+
+Recommended reading order:
+
+1. System map
+2. Object model
+3. BYO merchant deploy model
+4. Merchant manifest and offer schema
+5. Buyer claw request flow
+6. Agent bootstrap skill
+7. API contracts
+8. V0 build plan
+
 ## Example deploy package
 
-The repo now includes a deploy package at [`deploys/example`](./deploys/example):
+The repo includes a reference deploy package at [`deploys/example`](./deploys/example):
 
 - [`config.json`](./deploys/example/config.json)
 - [`merchants.csv`](./deploys/example/merchants.csv)
@@ -62,16 +84,9 @@ That package is the canonical local example for:
 - deterministic SQL generation
 - deterministic artifact materialization
 
-## Private deploy packages
+## Local development
 
-Keep real deploy packages under [`deploys/private`](./deploys/private/).
-
-- `deploys/example` is the committed reference package
-- `deploys/private/<deploy-id>/` is for real operator-managed deploy data
-- files under `deploys/private/` are ignored by git, except for the placeholder docs in that directory
-- materialize public artifacts from private deploys, but do not commit the raw deploy package by default
-
-## Local work
+Install dependencies and run the normal checks:
 
 ```bash
 npm install
@@ -99,23 +114,6 @@ Run local D1 setup before starting `wrangler dev`. If the dev server is already 
 
 If you change those values, restart `wrangler dev` and rematerialize artifacts so the cached `skill.md` matches the current runtime config.
 
-For deploy packages, set the same branding in `config.json` when you want generated artifacts to carry it too. For example:
-
-```json
-{
-  "deploy_id": "lobsterbrew",
-  "brand_name": "Lobster Brew",
-  "emoji": "🦞"
-}
-```
-
-Then materialize the public artifacts into the bound R2 bucket:
-
-```bash
-curl -X POST http://127.0.0.1:8787/internal/materialize \
-  -H "Authorization: Bearer replace-me"
-```
-
 After local D1 setup and materialization are complete, start the worker:
 
 ```bash
@@ -131,7 +129,24 @@ curl http://127.0.0.1:8787/offers/US
 curl http://127.0.0.1:8787/merchants/sample-roaster/connect
 ```
 
-## Runtime import workflow
+## Deploy and import workflow
+
+Keep real deploy packages under [`deploys/private`](./deploys/private/).
+
+- `deploys/example` is the committed reference package
+- `deploys/private/<deploy-id>/` is for real operator-managed deploy data
+- files under `deploys/private/` are ignored by git, except for the placeholder docs in that directory
+- materialize public artifacts from private deploys, but do not commit the raw deploy package by default
+
+For deploy packages, set the same branding in `config.json` when you want generated artifacts to carry it too. For example:
+
+```json
+{
+  "deploy_id": "lobsterbrew",
+  "brand_name": "Lobster Brew",
+  "emoji": "🦞"
+}
+```
 
 Generate deterministic SQL from a deploy package:
 
@@ -155,7 +170,7 @@ npx wrangler d1 execute lobsterbazaar --local --file build/example.sql
 
 If `wrangler dev` is already running, stop it first or local SQLite may return `database is locked`.
 
-Then rematerialize the runtime public artifacts used by the worker:
+Then materialize the public artifacts into the bound R2 bucket:
 
 ```bash
 curl -X POST http://127.0.0.1:8787/internal/materialize \

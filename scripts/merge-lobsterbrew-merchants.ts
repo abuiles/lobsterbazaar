@@ -7,16 +7,34 @@ import { normalizeCountryCode } from "../src/merchant";
 const BULK_SIZE = 2;
 
 interface SourceMerchantRow {
-  [key: string]: string;
-  shopify_store: string;
-  name: string;
-  country: string;
-  state: string;
-  city: string;
-  has_physical_locations: string;
-  physical_locations_count: string;
-  notes: string;
+  [key: string]: string | undefined;
+  shopify_store?: string;
+  name?: string;
+  company?: string;
+  url?: string;
+  normalized_url?: string;
+  host?: string;
+  country?: string;
+  state?: string;
+  city?: string;
+  neighborhood?: string;
+  locations?: string;
+  has_physical_locations?: string;
+  physical_locations_count?: string;
+  notes?: string;
 }
+
+const SOURCE_NAME_KEYS = [
+  "name",
+  "company"
+];
+
+const SOURCE_DOMAIN_KEYS = [
+  "shopify_store",
+  "url",
+  "normalized_url",
+  "host"
+];
 
 interface ParsedMerchantRow {
   slug: string;
@@ -44,6 +62,7 @@ interface Candidate {
   tags: string[];
   metadata: Record<string, unknown>;
   needsShopifyDescribe: boolean;
+  needsCountry: boolean;
 }
 
 type CsvRow = Record<string, string>;
@@ -112,13 +131,26 @@ function trim(value: string | undefined): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function normalizeDomain(raw: string): string {
-  return trim(raw)
-    .toLowerCase()
-    .replace(/^https?:\/\//i, "")
-    .replace(/^www\./i, "")
-    .split("/")[0]
-    .trim();
+function normalizeDomain(raw: string | undefined): string {
+  const normalized = trim(raw);
+  if (!normalized) {
+    return "";
+  }
+
+  let next = normalized.toLowerCase();
+  if (next.startsWith("https://")) {
+    next = next.slice(8);
+  } else if (next.startsWith("http://")) {
+    next = next.slice(7);
+  }
+  if (next.startsWith("www.")) {
+    next = next.slice(4);
+  }
+  const nextSlashIndex = next.indexOf("/");
+  if (nextSlashIndex > -1) {
+    next = next.slice(0, nextSlashIndex);
+  }
+  return next.trim();
 }
 
 function toUrl(rawDomain: string): string {
@@ -127,7 +159,12 @@ function toUrl(rawDomain: string): string {
     return "";
   }
 
-  return /^https?:\/\//i.test(rawDomain.trim()) ? trim(rawDomain).replace(/\/$/, "") : `https://${domain}`;
+  const raw = trim(rawDomain);
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    return raw.replace(/\/$/, "");
+  }
+
+  return `https://${domain}`;
 }
 
 function slugify(value: string): string {
@@ -181,6 +218,46 @@ function normalizeCountry(input: string): string | null {
   return null;
 }
 
+function pickFirst(row: CsvRow, keys: Array<keyof SourceMerchantRow>): string {
+  for (const key of keys) {
+    const value = trim((row as Record<string, string | undefined>)[key]);
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+function inferHasPhysical(row: SourceMerchantRow): string {
+  const hasPhysical = trim(row.has_physical_locations).toLowerCase();
+  const count = Number.parseInt(inferCount(row), 10);
+
+  if (hasPhysical === "yes" || hasPhysical === "no") {
+    return hasPhysical;
+  }
+
+  if (!Number.isNaN(count) && count > 0) {
+    return "yes";
+  }
+
+  return "";
+}
+
+function inferCount(row: SourceMerchantRow): string {
+  const countFromPhysical = Number.parseInt(trim(row.physical_locations_count), 10);
+  if (!Number.isNaN(countFromPhysical) && countFromPhysical >= 0) {
+    return String(countFromPhysical);
+  }
+
+  const countFromLocations = Number.parseInt(trim(row.locations), 10);
+  if (!Number.isNaN(countFromLocations) && countFromLocations >= 0) {
+    return String(countFromLocations);
+  }
+
+  return trim(row.physical_locations_count);
+}
+
 function weakDescription(value: string): boolean {
   const text = trim(value).toLowerCase();
   if (!text) {
@@ -204,9 +281,9 @@ function weakDescription(value: string): boolean {
   return weakTokens.some((token) => text.includes(token));
 }
 
-function inferLocations(row: Pick<SourceMerchantRow, "has_physical_locations" | "physical_locations_count">): string {
-  const has = trim(row.has_physical_locations).toLowerCase();
-  const countRaw = trim(row.physical_locations_count);
+function inferLocations(row: SourceMerchantRow): string {
+  const has = inferHasPhysical(row);
+  const countRaw = inferCount(row);
   const count = Number.parseInt(countRaw, 10);
 
   if (has === "yes") {
@@ -231,11 +308,15 @@ function inferLocations(row: Pick<SourceMerchantRow, "has_physical_locations" | 
 function tagsFor(row: SourceMerchantRow, countryCode: string): string[] {
   const tags = new Set<string>(["coffee", countryCode.toLowerCase()]);
   if (trim(row.city)) {
-    tags.add(`city-${slugify(row.city)}`);
+    tags.add(`city-${slugify(trim(row.city))}`);
+  }
+
+  if (trim(row.neighborhood)) {
+    tags.add(`neighborhood-${slugify(trim(row.neighborhood))}`);
   }
 
   if (trim(row.state)) {
-    tags.add(`state-${slugify(row.state)}`);
+    tags.add(`state-${slugify(trim(row.state))}`);
   }
 
   return [...tags];
@@ -244,6 +325,7 @@ function tagsFor(row: SourceMerchantRow, countryCode: string): string[] {
 function buildMetadata(row: SourceMerchantRow, countryCode: string): Record<string, unknown> {
   return {
     city: trim(row.city) || undefined,
+    neighborhood: trim(row.neighborhood) || undefined,
     state: trim(row.state) || undefined,
     country: trim(row.country) || undefined,
     country_code: countryCode,
@@ -305,8 +387,10 @@ function buildMerchantRow(candidate: Candidate): ParsedMerchantRow {
   };
 }
 
-function isSourceRow(row: CsvRow): row is SourceMerchantRow {
-  return Boolean(row.shopify_store && row.name);
+function isSourceRow(row: CsvRow): boolean {
+  const hasDomain = Boolean(trim(row.shopify_store) || trim(row.url) || trim(row.normalized_url) || trim(row.host));
+  const hasName = Boolean(trim(row.name) || trim(row.company));
+  return hasDomain && hasName;
 }
 
 async function fetchShopMetadata(domain: string): Promise<ShopJsonResponse["shop"] | null> {
@@ -352,14 +436,16 @@ async function main() {
   const sourceRows = parseCsv(sourceText)
     .filter(isSourceRow)
     .map((row) => ({
-      shopify_store: row.shopify_store,
-      name: row.name,
-      country: row.country,
-      state: row.state,
-      city: row.city,
-      has_physical_locations: row.has_physical_locations,
-      physical_locations_count: row.physical_locations_count,
-      notes: row.notes
+      shopify_store: pickFirst(row, SOURCE_DOMAIN_KEYS),
+      name: pickFirst(row, SOURCE_NAME_KEYS),
+      country: row.country || "",
+      state: row.state || "",
+      city: row.city || "",
+      neighborhood: row.neighborhood || "",
+      locations: row.locations || "",
+      has_physical_locations: row.has_physical_locations || "",
+      physical_locations_count: row.physical_locations_count || "",
+      notes: row.notes || ""
     }));
   const existingRows = parseCsv(targetText) as CsvRow[];
 
@@ -367,7 +453,7 @@ async function main() {
   const usedHosts = new Set<string>();
   for (const row of existingRows) {
     if (trim(row.slug)) {
-      usedSlugs.add(row.slug);
+      usedSlugs.add(row.slug || "");
     }
 
     const domainFromUrl = row.store_domain || normalizeDomain(row.store_url || "");
@@ -389,12 +475,6 @@ async function main() {
       continue;
     }
 
-    const countryCode = normalizeCountry(row.country);
-    if (!countryCode) {
-      review.push({ shopify_store: row.shopify_store, name: row.name, reason: "unmapped_country", slug: undefined });
-      continue;
-    }
-
     if (usedHosts.has(storeDomain)) {
       skipped.push({ shopify_store: row.shopify_store, name: row.name, reason: "already_exists_by_domain" });
       continue;
@@ -410,7 +490,10 @@ async function main() {
     usedSlugs.add(slug);
     usedHosts.add(storeDomain);
 
-    const countryCodes = [countryCode];
+    const countryCode = normalizeCountry(row.country);
+    const needsCountry = !countryCode;
+    const countryCodes = countryCode ? [countryCode] : [];
+    const effectiveCountryCode = countryCode || "US";
     const candidate: Candidate = {
       slug,
       name: trim(row.name),
@@ -419,15 +502,18 @@ async function main() {
       countryCodes,
       locationsSummary: inferLocations(row),
       notes: trim(row.notes),
-      tags: tagsFor(row, countryCode),
-      metadata: buildMetadata(row, countryCode),
-      needsShopifyDescribe: weakDescription(row.notes)
+      tags: tagsFor(row, effectiveCountryCode),
+      metadata: buildMetadata(row, effectiveCountryCode),
+      needsShopifyDescribe: weakDescription(row.notes),
+      needsCountry
     };
 
     candidates.push(candidate);
-    added.push(slug);
+    if (!needsCountry) {
+      added.push(slug);
+    }
 
-    if (candidate.needsShopifyDescribe) {
+    if (candidate.needsShopifyDescribe || candidate.needsCountry) {
       needsShopify.push(candidate);
     }
   }
@@ -447,6 +533,7 @@ async function main() {
           reason: "shop_json_unavailable",
           slug: candidate.slug
         });
+        candidate.needsCountry = false;
         continue;
       }
 
@@ -462,6 +549,20 @@ async function main() {
         candidate.countryCodes = [shopCountry];
         candidate.metadata.country = shop.country;
         candidate.metadata.country_code = shopCountry;
+
+        if (candidate.needsCountry) {
+          candidate.needsCountry = false;
+          added.push(candidate.slug);
+          candidate.metadata.shopify_confirmed = true;
+        }
+      } else if (candidate.needsCountry) {
+        review.push({
+          shopify_store: candidate.storeDomain,
+          name: candidate.name,
+          reason: "unmapped_country",
+          slug: candidate.slug
+        });
+        candidate.countryCodes = [];
       }
 
       candidate.metadata.shop_name = shop.name;
@@ -478,8 +579,32 @@ async function main() {
     }
   }
 
-  const existingByColumn = existingRows.sort((left, right) => left.slug.localeCompare(right.slug));
-  const mergedCandidates = candidates.map((candidate) => buildMerchantRow(candidate));
+  const finalCandidates = candidates.filter((candidate) => {
+    if (candidate.countryCodes.length > 0) {
+      return true;
+    }
+
+    if (candidate.needsCountry) {
+      review.push({
+        shopify_store: candidate.storeDomain,
+        name: candidate.name,
+        reason: "unmapped_country",
+        slug: candidate.slug
+      });
+    }
+
+    return false;
+  });
+
+  const existingByColumn = existingRows
+    .filter((row) => Boolean(trim(row.slug)))
+    .sort((left, right) => {
+      const leftSlug = left.slug || "";
+      const rightSlug = right.slug || "";
+      return leftSlug.localeCompare(rightSlug);
+    });
+  const mergedCandidates = finalCandidates.map((candidate) => buildMerchantRow(candidate));
+  const uniqueAdded = [...new Set(added)];
   const finalRows = [...existingByColumn, ...mergedCandidates].sort((left, right) => left.slug.localeCompare(right.slug));
 
   const defaultCountries = new Set<string>();
@@ -493,7 +618,7 @@ async function main() {
     generatedAt: new Date().toISOString(),
     sourcePath,
     targetPath,
-    added,
+    added: uniqueAdded,
     skipped,
     review,
     defaultCountries: [...defaultCountries].sort()
@@ -510,7 +635,7 @@ async function main() {
     await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
   }
 
-  console.log(`added=${added.length}`);
+  console.log(`added=${uniqueAdded.length}`);
   console.log(`review=${review.length}`);
   console.log(`default_countries=${[...defaultCountries].sort().join(",")}`);
 }

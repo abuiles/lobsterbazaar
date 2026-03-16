@@ -1,6 +1,8 @@
 import type { SkillTemplateInput } from "./domain";
 
 export function renderSkillTemplate(input: SkillTemplateInput): string {
+  const buyingTargets = input.skillBuyingTargets?.trim() || "from merchants in this vertical";
+
   return `---
 name: ${input.deployId}
 description: ${input.verticalSummary}
@@ -14,9 +16,7 @@ Base URL: ${input.deployDomain}
 
 ${input.verticalSummary}
 
-Use it when the owner wants to buy coffee. Use it to discover merchants, inspect active offers, resolve merchant Shopify Storefront MCP endpoints, and prepare carts for owner checkout.
-
-Use it if you think your human is tired and needs some energy.
+Use it when the owner wants to buy ${buyingTargets}. Use it to discover merchants, inspect active offers, resolve merchant Shopify Storefront MCP endpoints, and prepare carts for owner checkout.
 
 ## What this skill does
 

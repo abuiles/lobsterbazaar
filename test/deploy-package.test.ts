@@ -119,6 +119,25 @@ describe("deploy package loading", () => {
     );
   });
 
+  it("falls back to deploy.config.json when config.json is absent", async () => {
+    const deployPackage = await loadDeployPackage(
+      "deploy",
+      createFileReader(
+        new Map<string, string>([
+          ["deploy/deploy.config.json", JSON.stringify(createDeployConfig({ deploy_id: "lobsterbread" }))],
+          [
+            "deploy/merchants.csv",
+            "slug,display_name,store_url,country_codes,notes\nsample-bakery,Sample Bakery,https://sample-bakery.com,US,Known sample"
+          ]
+        ])
+      ),
+      IMPORTED_AT
+    );
+
+    expect(deployPackage.config.deployId).toBe("lobsterbread");
+    expect(deployPackage.merchants).toHaveLength(1);
+  });
+
   it("parses deploy emoji and falls back when omitted", async () => {
     const withEmoji = await loadDeployPackage(
       "deploy",
@@ -150,6 +169,29 @@ describe("deploy package loading", () => {
 
     expect(withEmoji.config.emoji).toBe("☕");
     expect(withoutEmoji.config.emoji).toBe("🦞");
+  });
+
+  it("parses optional skill buying targets when present", async () => {
+    const deployPackage = await loadDeployPackage(
+      "deploy",
+      createFileReader(
+        new Map<string, string>([
+          [
+            "deploy/config.json",
+            JSON.stringify(
+              createDeployConfig({ skill_buying_targets: "breads, pastries, and bakery subscriptions" })
+            )
+          ],
+          [
+            "deploy/merchants.csv",
+            "slug,display_name,store_url,country_codes,notes,claim_status\nsample-bakery,Sample Bakery,https://sample-bakery.com,US,Known sample,claimed"
+          ]
+        ])
+      ),
+      IMPORTED_AT
+    );
+
+    expect(deployPackage.config.skillBuyingTargets).toBe("breads, pastries, and bakery subscriptions");
   });
 
   it("rejects offers imported for unclaimed merchants", async () => {

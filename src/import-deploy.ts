@@ -65,6 +65,7 @@ export async function materializeDeployPackage(
     deployId: deployPackage.config.deployId,
     deployDomain: deployPackage.config.deployDomain,
     verticalSummary: deployPackage.config.verticalSummary,
+    skillBuyingTargets: deployPackage.config.skillBuyingTargets,
     registerPath: "/claws/register",
     countriesPath: "/countries",
     offersPath: "/offers",

@@ -8,6 +8,7 @@ export interface Env {
   BRAND_NAME: string;
   DEPLOY_DOMAIN: string;
   VERTICAL_SUMMARY: string;
+  SKILL_BUYING_TARGETS?: string;
   DEPLOY_MASCOT_URL?: string;
   DEPLOY_EMOJI?: string;
   OPERATOR_TOKEN?: string;
@@ -18,6 +19,7 @@ export function readDeployConfig(env: Env): DeployConfig {
   const brandName = env.BRAND_NAME?.trim();
   const deployDomain = env.DEPLOY_DOMAIN?.trim();
   const verticalSummary = env.VERTICAL_SUMMARY?.trim();
+  const skillBuyingTargets = env.SKILL_BUYING_TARGETS?.trim() || undefined;
   const mascotUrl = env.DEPLOY_MASCOT_URL?.trim() || "/assets/mascots/lobsterbazaar-default.jpg";
   const emoji = env.DEPLOY_EMOJI?.trim() || "🦞";
 
@@ -30,6 +32,7 @@ export function readDeployConfig(env: Env): DeployConfig {
     deployId,
     deployDomain,
     verticalSummary,
+    skillBuyingTargets,
     mascotUrl,
     emoji
   };

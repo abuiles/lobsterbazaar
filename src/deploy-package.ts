@@ -127,6 +127,14 @@ export function parseDeployConfig(text: string): DeployFileConfig {
     brandName: assertString(data.brand_name, "brand_name"),
     brandDescription: assertString(data.brand_description, "brand_description"),
     verticalSummary: assertString(data.vertical_summary, "vertical_summary"),
+    skillBuyingTargets:
+      typeof data.skill_buying_targets === "string" && data.skill_buying_targets.trim()
+        ? data.skill_buying_targets.trim()
+        : undefined,
+    mascotUrl:
+      typeof data.deploy_mascot_url === "string" && data.deploy_mascot_url.trim()
+        ? data.deploy_mascot_url.trim()
+        : "/assets/mascots/lobsterbazaar-default.jpg",
     emoji: typeof data.emoji === "string" && data.emoji.trim() ? data.emoji.trim() : "🦞",
     defaultCountries: Array.isArray(data.default_countries)
       ? data.default_countries.map((value) => normalizeCountryCode(assertString(value, "default_countries")))
@@ -327,8 +335,20 @@ export async function loadDeployPackage(
   readFile: FileReader,
   importedAt = "2026-03-15T00:00:00Z"
 ): Promise<DeployPackage> {
+  const readConfigText = async (): Promise<string> => {
+    try {
+      return await readFile(`${baseDir}/config.json`);
+    } catch (error) {
+      if (!isFileNotFoundError(error)) {
+        throw error;
+      }
+    }
+
+    return readFile(`${baseDir}/deploy.config.json`);
+  };
+
   const [configText, merchantsText] = await Promise.all([
-    readFile(`${baseDir}/config.json`),
+    readConfigText(),
     readFile(`${baseDir}/merchants.csv`)
   ]);
 

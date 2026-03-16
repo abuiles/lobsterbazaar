@@ -143,6 +143,7 @@ export interface SkillTemplateInput {
   deployId: string;
   deployDomain: string;
   verticalSummary: string;
+  skillBuyingTargets?: string;
   registerPath: string;
   countriesPath: string;
   offersPath: string;
@@ -154,6 +155,7 @@ export interface DeployConfig {
   deployId: string;
   deployDomain: string;
   verticalSummary: string;
+  skillBuyingTargets?: string;
   mascotUrl: string;
   emoji: string;
 }

@@ -56,6 +56,7 @@ export function errorResponse(error: unknown): Response {
 }
 
 export function isMethod(request: Request, method: string): boolean {
-  return request.method.toUpperCase() === method.toUpperCase();
+  const actual = request.method.toUpperCase();
+  const expected = method.toUpperCase();
+  return actual === expected || (actual === "HEAD" && expected === "GET");
 }
-

@@ -96,6 +96,7 @@ export async function createTestHarness(options: TestHarnessOptions = {}) {
       deployId: "lobsterbrew",
       deployDomain: "lobsterbrew.test",
       verticalSummary: "Coffee-oriented merchant discovery for lobsters.",
+      skillBuyingTargets: "coffee, subscriptions, and brewing gear",
       mascotUrl: "/assets/mascots/lobsterbazaar-default.jpg",
       emoji: "🦞"
     },

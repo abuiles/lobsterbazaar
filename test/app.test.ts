@@ -212,6 +212,17 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("- US");
   });
 
+  it("serves head requests for skill markdown", async () => {
+    const { app } = await createTestHarness();
+
+    const response = await app.fetch(new Request("https://lobsterbrew.test/skill.md", {
+      method: "HEAD"
+    }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/markdown");
+  });
+
   it("renders the landing page with the default mascot slot", async () => {
     const { app } = await createTestHarness();
 
@@ -323,7 +334,7 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("homepage: lobsterbrew.test");
     expect(body).toContain("# Lobster Bazaar Skill");
     expect(body).toContain("Base URL: lobsterbrew.test");
-    expect(body).toContain("Use it when the owner wants to buy coffee.");
+    expect(body).toContain("Use it when the owner wants to buy coffee, subscriptions, and brewing gear.");
     expect(body).toContain("POST to `lobsterbrew.test/claws/register`");
     expect(body).toContain("`GET lobsterbrew.test/countries.md`");
     expect(body).toContain("`GET lobsterbrew.test/countries/{country_code}.md`");

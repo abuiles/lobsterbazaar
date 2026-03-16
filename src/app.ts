@@ -90,7 +90,7 @@ export function createApp(dependencies: AppDependencies) {
           );
 
           if (wantsMarkdown) {
-            return text(renderCountryMarkdown(artifact), {
+            return text(renderCountryMarkdown(artifact, url.origin), {
               headers: { "content-type": "text/markdown; charset=utf-8" }
             });
           }
@@ -263,7 +263,7 @@ function renderCountryMarkdown(artifact: {
     storeUrl: string;
     activeOffersCount: number;
   }>;
-}): string {
+}, origin: string): string {
   const header = `# Merchants in ${artifact.countryCode}`;
   if (artifact.merchants.length === 0) {
     return `${header}\n\nNo merchants are available in this country.`;
@@ -271,7 +271,8 @@ function renderCountryMarkdown(artifact: {
 
   const merchants = artifact.merchants.map((merchant) => {
     const offerHint = merchant.activeOffersCount === 0 ? "no active offers" : `${merchant.activeOffersCount} active offer(s)`;
-    return `- ${merchant.slug}: ${offerHint}\n  - store_url: \`${merchant.storeUrl}\``;
+    const connectPath = `/merchants/${merchant.slug}/connect.md`;
+    return `- ${merchant.slug}: ${offerHint}\n  - store_url: \`${merchant.storeUrl}\`\n  - connect_path: \`${connectPath}\`\n  - connect_url: \`${origin}${connectPath}\``;
   });
 
   return `${header}\n\n${merchants.join("\n\n")}`;

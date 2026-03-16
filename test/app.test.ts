@@ -220,6 +220,20 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("10% off first order");
   });
 
+  it("returns country markdown with connect links for each merchant", async () => {
+    const { app } = await createTestHarness();
+
+    const { response, body } = await requestText(app, "/countries/US.md");
+
+    expect(response.status).toBe(200);
+    expect(body).toContain("- claimed-roaster: 1 active offer(s)");
+    expect(body).toContain("connect_path: `/merchants/claimed-roaster/connect.md`");
+    expect(body).toContain("connect_url: `https://lobsterbrew.test/merchants/claimed-roaster/connect.md`");
+    expect(body).toContain("- sample-roaster: no active offers");
+    expect(body).toContain("connect_path: `/merchants/sample-roaster/connect.md`");
+    expect(body).toContain("connect_url: `https://lobsterbrew.test/merchants/sample-roaster/connect.md`");
+  });
+
   it("returns 404 and skips artifact creation for unsupported countries", async () => {
     const { app, artifacts } = await createTestHarness();
 

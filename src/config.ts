@@ -9,6 +9,7 @@ export interface Env {
   DEPLOY_DOMAIN: string;
   VERTICAL_SUMMARY: string;
   DEPLOY_MASCOT_URL?: string;
+  DEPLOY_EMOJI?: string;
   OPERATOR_TOKEN?: string;
 }
 
@@ -18,6 +19,7 @@ export function readDeployConfig(env: Env): DeployConfig {
   const deployDomain = env.DEPLOY_DOMAIN?.trim();
   const verticalSummary = env.VERTICAL_SUMMARY?.trim();
   const mascotUrl = env.DEPLOY_MASCOT_URL?.trim() || "/assets/mascots/lobsterbazaar-default.jpg";
+  const emoji = env.DEPLOY_EMOJI?.trim() || "🦞";
 
   if (!deployId || !brandName || !deployDomain || !verticalSummary) {
     throw new Error("Missing required deploy configuration");
@@ -28,6 +30,7 @@ export function readDeployConfig(env: Env): DeployConfig {
     deployId,
     deployDomain,
     verticalSummary,
-    mascotUrl
+    mascotUrl,
+    emoji
   };
 }

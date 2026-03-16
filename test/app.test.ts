@@ -219,7 +219,15 @@ describe("lobsterbazaar worker", () => {
     const body = await response.text();
 
     expect(response.status).toBe(200);
-    expect(body).toContain("Agent-facing commerce deploy");
+    expect(body).toContain(">Lobster Bazaar<");
+    expect(body).toContain("Coffee-oriented merchant discovery for lobsters.");
+    expect(body).toContain("Send your AI agent to Lobster Bazaar");
+    expect(body).toContain("Read https://lobsterbrew.test/skill.md and follow the instructions to join Lobster Bazaar");
+    expect(body).toContain("Let it register and save its key");
+    expect(body).toContain("toggle theme");
+    expect(body).toContain("hello@lobsterbazaar.com");
+    expect(body).toContain("source code on GitHub");
+    expect(body).toContain("powered by");
     expect(body).toContain('/assets/mascots/lobsterbazaar-default.jpg');
   });
 

@@ -31,7 +31,7 @@ export function createApp(dependencies: AppDependencies) {
         }
 
         if (normalizedPath === "/" && isMethod(request, "GET")) {
-          return html(renderLandingPage(dependencies.config));
+          return html(renderLandingPage(dependencies.config, url.origin));
         }
 
         if (normalizedPath === "/skill" && isMethod(request, "GET")) {
@@ -361,7 +361,9 @@ function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string 
   return lines.join("\n");
 }
 
-function renderLandingPage(config: ReturnType<typeof readDeployConfig>): string {
+function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: string): string {
+  const skillUrl = `${origin.replace(/\/$/, "")}/skill.md`;
+
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -370,31 +372,67 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>): string 
     <title>${config.brandName}</title>
     <style>
       :root {
-        color-scheme: light;
-        --bg: #f7f3ea;
-        --panel: #fffaf1;
-        --ink: #1d1b18;
-        --muted: #6a6257;
-        --accent: #b95a1f;
-        --border: #d9c7b4;
+        color-scheme: dark light;
+        --bg: #232323;
+        --panel: #2c2c2f;
+        --prompt: #1a1a1d;
+        --ink: #f1efe8;
+        --muted: #a39d94;
+        --accent: #12decf;
+        --accent-soft: #ff4a4a;
+        --border: rgba(255, 255, 255, 0.12);
+        --shadow: 0 28px 60px rgba(0, 0, 0, 0.24);
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f3efe6;
+          --panel: #faf7f0;
+          --prompt: #ece7de;
+          --ink: #1a1714;
+          --muted: #6f675c;
+          --accent: #0ea99c;
+          --accent-soft: #c43838;
+          --border: rgba(26, 23, 20, 0.12);
+          --shadow: 0 20px 48px rgba(71, 54, 31, 0.12);
+        }
+      }
+      * {
+        box-sizing: border-box;
       }
       body {
         margin: 0;
-        font-family: "Iowan Old Style", "Palatino Linotype", serif;
-        background: radial-gradient(circle at top, #fff7ea, var(--bg));
+        font-family: "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace;
+        background: var(--bg);
         color: var(--ink);
       }
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: #f3efe6;
+        --panel: #faf7f0;
+        --prompt: #ece7de;
+        --ink: #1a1714;
+        --muted: #6f675c;
+        --accent: #0ea99c;
+        --accent-soft: #c43838;
+        --border: rgba(26, 23, 20, 0.12);
+        --shadow: 0 20px 48px rgba(71, 54, 31, 0.12);
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+      }
       main {
-        max-width: 1040px;
+        width: min(980px, calc(100% - 32px));
         margin: 0 auto;
-        padding: 56px 20px 72px;
+        padding: 26px 0 40px;
       }
       article {
-        background: color-mix(in srgb, var(--panel) 92%, white);
+        position: relative;
+        background: var(--panel);
         border: 1px solid var(--border);
-        border-radius: 20px;
+        border-radius: 22px;
         padding: 28px;
-        box-shadow: 0 18px 50px rgba(26, 20, 15, 0.08);
+        padding-top: 56px;
+        box-shadow: var(--shadow);
         display: grid;
         gap: 24px;
       }
@@ -406,18 +444,26 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>): string 
       }
       .copy {
         min-width: 0;
+        display: grid;
+        gap: 18px;
+      }
+      .topline {
+        position: absolute;
+        top: 18px;
+        right: 18px;
+        z-index: 1;
       }
       .mascot-panel {
-        background: linear-gradient(180deg, rgba(255, 246, 233, 0.95), rgba(240, 227, 206, 0.92));
         border: 1px solid var(--border);
         border-radius: 18px;
         padding: 14px;
+        background: rgba(255,255,255,0.02);
       }
       .mascot-frame {
         aspect-ratio: 4 / 5;
         border-radius: 14px;
         overflow: hidden;
-        background: #efe4d2;
+        background: #181818;
       }
       .mascot-frame img {
         width: 100%;
@@ -425,34 +471,118 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>): string 
         object-fit: cover;
         display: block;
       }
+      .kicker {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      .theme-toggle {
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--muted);
+        border-radius: 999px;
+        padding: 6px 10px;
+        font: inherit;
+        cursor: pointer;
+        font-size: 0.9rem;
+        letter-spacing: 0.01em;
+      }
+      .theme-toggle:hover {
+        color: var(--ink);
+        border-color: color-mix(in srgb, var(--border) 55%, var(--ink));
+      }
       h1 {
-        margin: 0 0 12px;
-        font-size: clamp(2.2rem, 6vw, 4rem);
-        line-height: 0.95;
+        margin: 0;
+        font-size: clamp(2rem, 6vw, 3.4rem);
+        line-height: 1.06;
+        letter-spacing: -0.03em;
+      }
+      .install-copy {
+        color: var(--muted);
+        font-size: 1.02rem;
       }
       p {
-        font-size: 1.05rem;
-        line-height: 1.6;
+        font-size: 1rem;
+        line-height: 1.65;
       }
       .muted {
         color: var(--muted);
       }
-      .links {
-        display: flex;
-        gap: 12px;
-        flex-wrap: wrap;
-        margin-top: 28px;
+      .prompt-title {
+        color: var(--muted);
+        font-size: 0.92rem;
       }
-      a {
+      .prompt {
+        background: var(--prompt);
+        border-radius: 12px;
+        padding: 18px 22px;
+      }
+      .prompt pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: clamp(1rem, 2vw, 1.18rem);
+        line-height: 1.65;
+        color: var(--accent);
+      }
+      .steps {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 8px;
+      }
+      .steps li {
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+        color: var(--muted);
+        font-size: clamp(1rem, 2vw, 1.12rem);
+      }
+      .steps strong {
+        color: var(--accent-soft);
+        min-width: 1.4em;
+      }
+      .caption {
+        max-width: 54ch;
+      }
+      .contact-card {
+        margin-top: 18px;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 22px 28px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+      .contact-card h2 {
+        margin: 0 0 6px;
+        font-size: 1.1rem;
+      }
+      .contact-card p {
+        margin: 0 0 14px;
+      }
+      .contact-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 10px;
+      }
+      .contact-list a {
         color: var(--ink);
         text-decoration: none;
-        border-bottom: 2px solid var(--accent);
-        padding-bottom: 2px;
+        border-bottom: 1px solid transparent;
       }
-      code {
-        background: rgba(29, 27, 24, 0.06);
-        padding: 0.2rem 0.4rem;
-        border-radius: 6px;
+      .contact-list a:hover {
+        border-bottom-color: var(--accent);
+      }
+      @media (max-width: 640px) {
+        .topline {
+          top: 14px;
+          right: 14px;
+        }
+        article {
+          padding-top: 62px;
+        }
       }
     </style>
   </head>
@@ -460,15 +590,20 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>): string 
     <main>
       <article>
         <div class="copy">
-          <p class="muted">Agent-facing commerce deploy</p>
-          <h1>${config.brandName}</h1>
-          <p>${config.verticalSummary}</p>
-          <p>Install the deploy into a lobster with <code>/skill.md</code>, register the claw, discover merchants by country, then hand off catalog and cart work to the selected merchant’s Storefront MCP endpoint.</p>
-          <div class="links">
-            <a href="/skill.md">Open skill.md</a>
-            <a href="/countries/US">Example country JSON</a>
-            <a href="/offers/US">Example offers JSON</a>
+          <div class="topline">
+            <button class="theme-toggle" type="button" data-theme-toggle>toggle theme</button>
           </div>
+          <h1>${config.brandName}</h1>
+          <p class="caption muted">${config.verticalSummary}</p>
+          <p class="install-copy">Send your AI agent to ${config.brandName} ${config.emoji}</p>
+          <div class="prompt">
+            <pre>Read ${skillUrl} and follow the instructions to join ${config.brandName}</pre>
+          </div>
+          <ol class="steps">
+            <li><strong>1.</strong><span>Send this to your agent</span></li>
+            <li><strong>2.</strong><span>Let it register and save its key</span></li>
+            <li><strong>3.</strong><span>Then it can start shopping through the right merchant MCP</span></li>
+          </ol>
         </div>
         <aside class="mascot-panel">
           <div class="mascot-frame">
@@ -476,6 +611,36 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>): string 
           </div>
         </aside>
       </article>
+      <section class="contact-card">
+        <h2>contact</h2>
+        <p class="muted">get in touch</p>
+        <ul class="contact-list">
+          <li><a href="mailto:hello@lobsterbazaar.com">hello@lobsterbazaar.com</a></li>
+          <li>request a walkthrough / waitlist / demo</li>
+          <li>i'm a merchant and want help going agentic, including setting up my own claw to interact with my customers</li>
+          <li><a href="https://github.com/abuiles/lobsterbazaar">source code on GitHub</a></li>
+          <li>made for claws, shoppers, and merchants*</li>
+          <li>built by <a href="https://x.com/abuiles">@abuiles</a></li>
+          <li>powered by <a href="https://lobsterbazaar.com/">lobsterbazaar.com</a></li>
+        </ul>
+      </section>
+      <script>
+        (() => {
+          const root = document.documentElement;
+          const button = document.querySelector("[data-theme-toggle]");
+          const storageKey = "lobsterbazaar-theme";
+          const savedTheme = localStorage.getItem(storageKey);
+          if (savedTheme === "light" || savedTheme === "dark") {
+            root.dataset.theme = savedTheme;
+          }
+          if (!button) return;
+          button.addEventListener("click", () => {
+            const nextTheme = root.dataset.theme === "light" ? "dark" : "light";
+            root.dataset.theme = nextTheme;
+            localStorage.setItem(storageKey, nextTheme);
+          });
+        })();
+      </script>
     </main>
   </body>
 </html>`;

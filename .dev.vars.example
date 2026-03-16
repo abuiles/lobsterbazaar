@@ -3,5 +3,6 @@ DEPLOY_ID=lobsterbazaar
 BRAND_NAME=Lobster Bazaar
 DEPLOY_DOMAIN=localhost:8787
 VERTICAL_SUMMARY=An agent-facing coffee buying service for Shopify coffee merchants. Use it to discover roasters, compare offers, connect to each merchant's Shopify Storefront MCP, build carts, and return a checkout link for the owner to complete payment.
+DEPLOY_EMOJI=🦞
 # Optional: point to a deploy-specific mascot image, otherwise the default lobsterbazaar mascot is used.
 # DEPLOY_MASCOT_URL=/assets/mascots/custom-deploy.jpg

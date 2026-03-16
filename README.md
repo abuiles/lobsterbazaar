@@ -88,6 +88,7 @@ Run local D1 setup before starting `wrangler dev`. If the dev server is already 
 
 - `DEPLOY_ID` controls the claw API key prefix and `lb_source__` cart attribute
 - `BRAND_NAME`, `DEPLOY_DOMAIN`, and `VERTICAL_SUMMARY` control the runtime `GET /skill.md`
+- `DEPLOY_EMOJI` controls the landing-page install heading emoji
 - `DEPLOY_MASCOT_URL` optionally overrides the landing-page mascot; otherwise the default mascot in `public/assets/mascots/lobsterbazaar-default.jpg` is used
 - `OPERATOR_TOKEN` is required for `POST /internal/materialize`
 

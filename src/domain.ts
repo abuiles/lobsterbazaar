@@ -155,6 +155,7 @@ export interface DeployConfig {
   deployDomain: string;
   verticalSummary: string;
   mascotUrl: string;
+  emoji: string;
 }
 
 export interface DeployFileConfig extends DeployConfig {

@@ -109,3 +109,9 @@ export async function requestJson<T>(app: ReturnType<typeof createApp>, input: s
   const body = (await response.json()) as T;
   return { response, body };
 }
+
+export async function requestText(app: ReturnType<typeof createApp>, input: string, init?: RequestInit) {
+  const response = await app.fetch(new Request(`https://lobsterbrew.test${input}`, init));
+  const body = await response.text();
+  return { response, body };
+}

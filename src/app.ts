@@ -22,12 +22,14 @@ export function createApp(dependencies: AppDependencies) {
       try {
         const url = new URL(request.url);
         const pathname = url.pathname.replace(/\/+$/, "") || "/";
+        const wantsMarkdown = pathname.endsWith(".md");
+        const normalizedPath = wantsMarkdown ? pathname.slice(0, -3) : pathname;
 
-        if (pathname === "/" && isMethod(request, "GET")) {
+        if (normalizedPath === "/" && isMethod(request, "GET")) {
           return html(renderLandingPage(dependencies.config));
         }
 
-        if (pathname === "/skill.md" && isMethod(request, "GET")) {
+        if (normalizedPath === "/skill" && isMethod(request, "GET")) {
           const skill = await ensureSkillArtifact(dependencies.artifacts, {
             brandName: dependencies.config.brandName,
             deployId: dependencies.config.deployId,
@@ -42,7 +44,7 @@ export function createApp(dependencies: AppDependencies) {
           return text(skill, { headers: { "content-type": "text/markdown; charset=utf-8" } });
         }
 
-        if (pathname === "/claws/register" && isMethod(request, "POST")) {
+        if (normalizedPath === "/claws/register" && isMethod(request, "POST")) {
           const payload = await parseRegisterRequest(request);
           const result = await dependencies.repositories.createClaw(payload, dependencies.config.deployId);
 
@@ -60,7 +62,20 @@ export function createApp(dependencies: AppDependencies) {
           );
         }
 
-        const countryMatch = pathname.match(/^\/countries\/([A-Za-z]{2,3})$/);
+        if (normalizedPath === "/countries" && isMethod(request, "GET")) {
+          const countryCodes = await dependencies.repositories.listCountryCodes();
+          return wantsMarkdown
+            ? text(
+                renderCountriesIndexMarkdown(countryCodes),
+                { headers: { "content-type": "text/markdown; charset=utf-8" } }
+              )
+            : json({
+                generated_at: dependencies.now(),
+                countries: countryCodes
+              });
+        }
+
+        const countryMatch = normalizedPath.match(/^\/countries\/([A-Za-z]{2,3})$/);
         if (countryMatch && isMethod(request, "GET")) {
           const countryCode = normalizeCountryCode(countryMatch[1] ?? "");
           if (!(await dependencies.repositories.supportsCountry(countryCode))) {
@@ -73,6 +88,12 @@ export function createApp(dependencies: AppDependencies) {
             countryCode,
             dependencies.now()
           );
+
+          if (wantsMarkdown) {
+            return text(renderCountryMarkdown(artifact), {
+              headers: { "content-type": "text/markdown; charset=utf-8" }
+            });
+          }
 
           return json({
             country_code: artifact.countryCode,
@@ -88,7 +109,7 @@ export function createApp(dependencies: AppDependencies) {
           });
         }
 
-        const offersMatch = pathname.match(/^\/offers\/([A-Za-z]{2,3})$/);
+        const offersMatch = normalizedPath.match(/^\/offers\/([A-Za-z]{2,3})$/);
         if (offersMatch && isMethod(request, "GET")) {
           const countryCode = normalizeCountryCode(offersMatch[1] ?? "");
           if (!(await dependencies.repositories.supportsCountry(countryCode))) {
@@ -101,6 +122,12 @@ export function createApp(dependencies: AppDependencies) {
             countryCode,
             dependencies.now()
           );
+
+          if (wantsMarkdown) {
+            return text(renderOffersMarkdown(artifact.offers, countryCode), {
+              headers: { "content-type": "text/markdown; charset=utf-8" }
+            });
+          }
 
           return json({
             country_code: artifact.countryCode,
@@ -118,7 +145,7 @@ export function createApp(dependencies: AppDependencies) {
           });
         }
 
-        const merchantMatch = pathname.match(/^\/merchants\/([^/]+)\/connect$/);
+        const merchantMatch = normalizedPath.match(/^\/merchants\/([^/]+)\/connect$/);
         if (merchantMatch && isMethod(request, "GET")) {
           const slug = merchantMatch[1] ?? "";
           const artifact = await ensureMerchantArtifact(
@@ -134,13 +161,16 @@ export function createApp(dependencies: AppDependencies) {
 
           const payload: MerchantConnectPayload = {
             merchant: {
-              slug: artifact.slug,
-              displayName: artifact.displayName,
+              name: artifact.displayName,
               storeUrl: artifact.storeUrl
             },
             mcp: {
               url: artifact.storefrontMcpUrl
             },
+            offers: await dependencies.repositories.listActiveOffersForMerchant(
+              artifact.slug,
+              dependencies.now()
+            ),
             cartAttributes: [
               {
                 key: "lb_source__",
@@ -149,13 +179,26 @@ export function createApp(dependencies: AppDependencies) {
             ]
           };
 
+          if (wantsMarkdown) {
+            return text(renderMerchantConnectMarkdown(payload), {
+              headers: { "content-type": "text/markdown; charset=utf-8" }
+            });
+          }
+
           return json({
             merchant: {
-              slug: payload.merchant.slug,
-              display_name: payload.merchant.displayName,
+              name: payload.merchant.name,
               store_url: payload.merchant.storeUrl
             },
             mcp: payload.mcp,
+            offers: payload.offers.map((offer) => ({
+              offer_id: offer.offerId,
+              title: offer.title,
+              summary: offer.summary,
+              offer_type: offer.offerType,
+              valid_through: offer.validThrough,
+              terms_text: offer.termsText
+            })),
             cart_attributes: payload.cartAttributes.map((attribute) => ({
               key: attribute.key,
               value: attribute.value
@@ -163,7 +206,7 @@ export function createApp(dependencies: AppDependencies) {
           });
         }
 
-        if (pathname === "/internal/materialize" && isMethod(request, "POST")) {
+        if (normalizedPath === "/internal/materialize" && isMethod(request, "POST")) {
           const header = request.headers.get("authorization");
           const operatorToken = header?.replace(/^Bearer\s+/i, "");
 
@@ -200,6 +243,106 @@ export function createApp(dependencies: AppDependencies) {
       }
     }
   };
+}
+
+function renderCountriesIndexMarkdown(countryCodes: string[]): string {
+  const header = "# Available Countries";
+  if (countryCodes.length === 0) {
+    return `${header}\n\nNo countries are available yet.`;
+  }
+
+  return `${header}\n\n${countryCodes.map((code) => `- ${code}`).join("\n")}`;
+}
+
+function renderCountryMarkdown(artifact: {
+  countryCode: string;
+  merchants: Array<{
+    slug: string;
+    storeUrl: string;
+    activeOffersCount: number;
+  }>;
+}): string {
+  const header = `# Merchants in ${artifact.countryCode}`;
+  if (artifact.merchants.length === 0) {
+    return `${header}\n\nNo merchants are available in this country.`;
+  }
+
+  const merchants = artifact.merchants.map((merchant) => {
+    const offerHint = merchant.activeOffersCount === 0 ? "no active offers" : `${merchant.activeOffersCount} active offer(s)`;
+    return `- ${merchant.slug}: ${offerHint}\n  - store_url: \`${merchant.storeUrl}\``;
+  });
+
+  return `${header}\n\n${merchants.join("\n\n")}`;
+}
+
+function renderOffersMarkdown(offers: Array<{
+  offerId: string;
+  merchantSlug: string;
+  merchantDisplayName: string;
+  title: string;
+  summary: string;
+  validThrough: string;
+  offerType: string;
+  termsText: string;
+}>, countryCode: string): string {
+  const lines = [
+    `# Active Offers in ${countryCode}`,
+    ""
+  ];
+
+  if (offers.length === 0) {
+    lines.push("No active offers found for this country.");
+  } else {
+    for (const offer of offers) {
+      lines.push(`- ${offer.title} (${offer.offerType})`);
+      lines.push(`  - merchant_slug: \`${offer.merchantSlug}\``);
+      lines.push(`  - merchant_display_name: \`${offer.merchantDisplayName}\``);
+      lines.push(`  - offer_id: \`${offer.offerId}\``);
+      lines.push(`  - merchant: \`${offer.merchantSlug}\``);
+      lines.push(`  - valid_through: \`${offer.validThrough}\``);
+      lines.push(`  - summary: ${offer.summary}`);
+      lines.push(`  - terms: ${offer.termsText}`);
+      lines.push("");
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string {
+  const lines = [
+    "# Merchant Connect",
+    "",
+    "## Merchant",
+    "",
+    `- name: \`${payload.merchant.name}\``,
+    `- store_url: \`${payload.merchant.storeUrl}\``,
+    `- storefront_mcp_url: \`${payload.mcp.url}\``,
+    ""
+  ];
+
+  if (payload.offers.length > 0) {
+    lines.push("## Active Offers");
+    for (const offer of payload.offers) {
+      lines.push("");
+      lines.push(`- ${offer.title} (\`${offer.offerType}\`)`);
+      lines.push(`  - offer_id: \`${offer.offerId}\``);
+      lines.push(`  - summary: ${offer.summary}`);
+      lines.push(`  - terms: ${offer.termsText}`);
+      lines.push(`  - valid_through: \`${offer.validThrough}\``);
+    }
+    lines.push("");
+  } else {
+    lines.push("No active offers are available.");
+    lines.push("");
+  }
+
+  lines.push("## Cart Attributes");
+  for (const attribute of payload.cartAttributes) {
+    lines.push(`- ${attribute.key} = ${attribute.value}`);
+  }
+
+  return lines.join("\n");
 }
 
 function renderLandingPage(config: ReturnType<typeof readDeployConfig>): string {

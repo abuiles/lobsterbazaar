@@ -285,6 +285,52 @@ export class D1Repositories implements Repositories {
     }));
   }
 
+  async listActiveOffersForMerchant(merchantSlug: string, now: string): Promise<PublicOffer[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT
+           o.offer_id,
+           o.merchant_slug,
+           m.display_name AS merchant_display_name,
+           o.title,
+           o.summary,
+           o.offer_type,
+           o.valid_through,
+           o.terms_text,
+           o.priority
+         FROM offers o
+         JOIN merchants m
+           ON m.slug = o.merchant_slug
+         WHERE o.merchant_slug = ?1
+           AND o.status = 'active'
+           AND (o.active_from IS NULL OR o.active_from <= ?2)
+           AND o.valid_through >= ?2
+         ORDER BY o.priority DESC, o.title ASC`
+      )
+      .bind(merchantSlug, now)
+      .all<{
+        offer_id: string;
+        merchant_slug: string;
+        merchant_display_name: string;
+        title: string;
+        summary: string;
+        offer_type: string;
+        valid_through: string;
+        terms_text: string;
+      }>();
+
+    return (result.results ?? []).map((row) => ({
+      offerId: row.offer_id,
+      merchantSlug: row.merchant_slug,
+      merchantDisplayName: row.merchant_display_name,
+      title: row.title,
+      summary: row.summary,
+      offerType: row.offer_type,
+      validThrough: row.valid_through,
+      termsText: row.terms_text
+    }));
+  }
+
   async listMerchantArtifacts(now: string): Promise<MerchantArtifact[]> {
     const merchantsResult = await this.db.prepare(`SELECT * FROM merchants ORDER BY slug ASC`).all<MerchantRow>();
     const merchants = merchantsResult.results ?? [];

@@ -94,13 +94,20 @@ export interface PublicOffer {
 
 export interface MerchantConnectPayload {
   merchant: {
-    slug: string;
-    displayName: string;
+    name: string;
     storeUrl: string;
   };
   mcp: {
     url: string;
   };
+  offers: Array<{
+    offerId: string;
+    title: string;
+    summary: string;
+    offerType: string;
+    validThrough: string;
+    termsText: string;
+  }>;
   cartAttributes: Array<{
     key: string;
     value: string;

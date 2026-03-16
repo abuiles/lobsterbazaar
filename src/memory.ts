@@ -156,6 +156,34 @@ export class MemoryRepositories implements Repositories {
       });
   }
 
+  async listActiveOffersForMerchant(merchantSlug: string, now: string): Promise<PublicOffer[]> {
+    const merchant = this.merchants.get(merchantSlug);
+    if (!merchant) {
+      return [];
+    }
+
+    return Array.from(this.offers.values())
+      .filter((offer) => offer.merchantSlug === merchantSlug)
+      .filter((offer) => isOfferActive(offer, now))
+      .sort((left, right) => {
+        if (left.priority !== right.priority) {
+          return right.priority - left.priority;
+        }
+
+        return left.title.localeCompare(right.title);
+      })
+      .map((offer) => ({
+        offerId: offer.offerId,
+        merchantSlug: offer.merchantSlug,
+        merchantDisplayName: merchant.displayName,
+        title: offer.title,
+        summary: offer.summary,
+        offerType: offer.offerType,
+        validThrough: offer.validThrough,
+        termsText: offer.termsText
+      }));
+  }
+
   async listMerchantArtifacts(now: string): Promise<MerchantArtifact[]> {
     const activeCounts = await this.listActiveOfferCounts(undefined, now);
 

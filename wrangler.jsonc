@@ -11,8 +11,7 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "lobsterbazaar",
-      "database_id": "${DB_ID}"
+      "database_name": "lobsterbazaar"
     }
   ],
   "r2_buckets": [

@@ -264,6 +264,8 @@ describe("deploy package loading", () => {
     expect(first).toContain("DELETE FROM offers WHERE offer_id NOT IN ('offer_sample');");
     expect(first).toContain("DELETE FROM merchant_claims WHERE claim_id NOT IN ('claim_import_sample-roaster');");
     expect(first).toContain("DELETE FROM merchants WHERE slug NOT IN ('sample-roaster', 'plain-roaster');");
+    expect(first).not.toContain("BEGIN TRANSACTION;");
+    expect(first).not.toContain("COMMIT;");
   });
 });
 

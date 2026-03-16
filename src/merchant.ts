@@ -25,6 +25,23 @@ export function deriveStorefrontMcpUrl(merchant: Pick<Merchant, "storeDomain" | 
   return `${url.origin}/api/mcp`;
 }
 
+export function buildPublicMerchantSummary(input: {
+  locationsSummary?: string;
+  verticalMetadata?: Record<string, unknown>;
+}): string {
+  const verticalMetadata = input.verticalMetadata ?? {};
+  const parts = [
+    typeof verticalMetadata.city === "string" ? verticalMetadata.city : undefined,
+    typeof verticalMetadata.neighborhood === "string" ? verticalMetadata.neighborhood : undefined,
+    typeof verticalMetadata.type === "string" ? verticalMetadata.type : undefined,
+    input.locationsSummary && input.locationsSummary !== "unknown physical cafes"
+      ? input.locationsSummary
+      : undefined
+  ].filter((value): value is string => Boolean(value));
+
+  return parts.join(" · ");
+}
+
 export function compareCountryMerchants(
   left: { activeOffersCount: number; displayName: string; slug: string },
   right: { activeOffersCount: number; displayName: string; slug: string }

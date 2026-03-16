@@ -76,8 +76,7 @@ export interface CountryMerchantSummary {
   slug: string;
   displayName: string;
   storeUrl: string;
-  notes: string;
-  claimStatus: ClaimStatus;
+  summary: string;
   activeOffersCount: number;
 }
 

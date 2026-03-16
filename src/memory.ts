@@ -14,7 +14,7 @@ import type {
 import { hashSecret } from "./crypto";
 import { conflict, notFound } from "./errors";
 import { createApiKey, createId } from "./ids";
-import { compareCountryMerchants, deriveStorefrontMcpUrl, isOfferActive, normalizeCountryCode } from "./merchant";
+import { buildPublicMerchantSummary, compareCountryMerchants, deriveStorefrontMcpUrl, isOfferActive, normalizeCountryCode } from "./merchant";
 import type { ArtifactStore, CreateClaimInput, CreateMerchantInput, CreateOfferInput, Repositories } from "./storage";
 
 export class MemoryArtifactStore implements ArtifactStore {
@@ -112,8 +112,10 @@ export class MemoryRepositories implements Repositories {
         slug: merchant.slug,
         displayName: merchant.displayName,
         storeUrl: merchant.storeUrl,
-        notes: merchant.notes,
-        claimStatus: merchant.claimStatus,
+        summary: buildPublicMerchantSummary({
+          locationsSummary: merchant.locationsSummary,
+          verticalMetadata: merchant.verticalMetadata
+        }),
         activeOffersCount: activeCounts.get(merchant.slug) ?? 0
       }))
       .sort(compareCountryMerchants);

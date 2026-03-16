@@ -57,6 +57,15 @@ That package is the canonical local example for:
 - deterministic SQL generation
 - deterministic artifact materialization
 
+## Private deploy packages
+
+Keep real deploy packages under [`deploys/private`](./deploys/private/).
+
+- `deploys/example` is the committed reference package
+- `deploys/private/<deploy-id>/` is for real operator-managed deploy data
+- files under `deploys/private/` are ignored by git, except for the placeholder docs in that directory
+- materialize public artifacts from private deploys, but do not commit the raw deploy package by default
+
 ## Local work
 
 ```bash

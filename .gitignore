@@ -199,3 +199,6 @@ dist
 !.dev.vars.example
 .worktrees
 build
+deploys/private/*
+!deploys/private/.gitkeep
+!deploys/private/README.md

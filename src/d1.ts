@@ -11,7 +11,7 @@ import type {
 } from "./domain";
 import { conflict, notFound } from "./errors";
 import { createApiKey, createId } from "./ids";
-import { compareCountryMerchants, deriveStorefrontMcpUrl, normalizeCountryCode } from "./merchant";
+import { buildPublicMerchantSummary, compareCountryMerchants, deriveStorefrontMcpUrl, normalizeCountryCode } from "./merchant";
 import type { CreateClaimInput, CreateMerchantInput, CreateOfferInput, Repositories } from "./storage";
 
 interface MerchantRow {
@@ -182,8 +182,8 @@ export class D1Repositories implements Repositories {
            m.slug,
            m.display_name,
            m.store_url,
-           m.notes,
-           m.claim_status,
+           m.locations_summary,
+           m.vertical_metadata_json,
            COUNT(o.offer_id) AS active_offers_count
          FROM merchants m
          JOIN merchant_countries mc
@@ -197,15 +197,15 @@ export class D1Repositories implements Repositories {
           AND (o.active_from IS NULL OR o.active_from <= ?2)
           AND o.valid_through >= ?2
          WHERE mc.country_code = ?1
-         GROUP BY m.slug, m.display_name, m.store_url, m.notes, m.claim_status`
+         GROUP BY m.slug, m.display_name, m.store_url, m.locations_summary, m.vertical_metadata_json`
       )
       .bind(normalized, now)
       .all<{
         slug: string;
         display_name: string;
         store_url: string;
-        notes: string;
-        claim_status: Merchant["claimStatus"];
+        locations_summary: string | null;
+        vertical_metadata_json: string;
         active_offers_count: number | string;
       }>();
 
@@ -214,8 +214,10 @@ export class D1Repositories implements Repositories {
         slug: row.slug,
         displayName: row.display_name,
         storeUrl: row.store_url,
-        notes: row.notes,
-        claimStatus: row.claim_status,
+        summary: buildPublicMerchantSummary({
+          locationsSummary: row.locations_summary ?? undefined,
+          verticalMetadata: JSON.parse(row.vertical_metadata_json || "{}") as Record<string, unknown>
+        }),
         activeOffersCount: Number(row.active_offers_count ?? 0)
       }))
       .sort(compareCountryMerchants);

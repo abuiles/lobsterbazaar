@@ -102,8 +102,7 @@ export function createApp(dependencies: AppDependencies) {
               slug: merchant.slug,
               display_name: merchant.displayName,
               store_url: merchant.storeUrl,
-              notes: merchant.notes,
-              claim_status: merchant.claimStatus,
+              summary: merchant.summary,
               active_offers_count: merchant.activeOffersCount
             }))
           });
@@ -262,6 +261,7 @@ function renderCountryMarkdown(artifact: {
   merchants: Array<{
     slug: string;
     storeUrl: string;
+    summary: string;
     activeOffersCount: number;
   }>;
 }, origin: string): string {
@@ -273,7 +273,8 @@ function renderCountryMarkdown(artifact: {
   const merchants = artifact.merchants.map((merchant) => {
     const offerHint = merchant.activeOffersCount === 0 ? "no active offers" : `${merchant.activeOffersCount} active offer(s)`;
     const connectPath = `/merchants/${merchant.slug}/connect.md`;
-    return `- ${merchant.slug}: ${offerHint}\n  - store_url: \`${merchant.storeUrl}\`\n  - connect_path: \`${connectPath}\`\n  - connect_url: \`${origin}${connectPath}\``;
+    const summaryLine = merchant.summary ? `\n  - summary: ${merchant.summary}` : "";
+    return `- ${merchant.slug}: ${offerHint}${summaryLine}\n  - store_url: \`${merchant.storeUrl}\`\n  - connect_path: \`${connectPath}\`\n  - connect_url: \`${origin}${connectPath}\``;
   });
 
   return `${header}\n\n${merchants.join("\n\n")}`;

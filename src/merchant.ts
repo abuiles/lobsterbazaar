@@ -1,7 +1,15 @@
+import { badRequest } from "./errors";
 import type { Merchant } from "./domain";
 
+const COUNTRY_CODE_PATTERN = /^[A-Z]{2,3}$/;
+
 export function normalizeCountryCode(countryCode: string): string {
-  return countryCode.trim().toUpperCase();
+  const normalized = countryCode.trim().toUpperCase();
+  if (!COUNTRY_CODE_PATTERN.test(normalized)) {
+    throw badRequest(`Invalid country code: ${countryCode}`);
+  }
+
+  return normalized;
 }
 
 export function deriveStorefrontMcpUrl(merchant: Pick<Merchant, "storeDomain" | "storeUrl" | "storefrontMcpUrl">): string {
@@ -47,4 +55,3 @@ export function isOfferActive(
 
   return offer.validThrough >= now;
 }
-

@@ -98,6 +98,12 @@ Generate deterministic SQL from a deploy package:
 npm run build:deploy:sql -- deploys/example > build/example.sql
 ```
 
+For V0, deploy packages must keep:
+
+- `public_directory: true`
+- `offers_enabled: true`
+- `claim_mode: "operator_managed"`
+
 Load that SQL into local D1:
 
 ```bash
@@ -109,6 +115,10 @@ Generate local review artifacts from the same deploy package:
 ```bash
 npm run build:deploy:artifacts -- deploys/example build/example
 ```
+
+The output directory is regenerated from scratch on each successful run. Failed runs keep the previous artifact set in place.
+
+For deterministic regeneration, every `offers.json` entry must include a stable `offer_id`.
 
 That writes:
 

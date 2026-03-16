@@ -31,7 +31,7 @@ export function createApp(dependencies: AppDependencies) {
         }
 
         if (normalizedPath === "/" && isMethod(request, "GET")) {
-          return html(renderLandingPage(dependencies.config, url.origin));
+          return html(renderLandingPage(dependencies.config));
         }
 
         if (normalizedPath === "/skill" && isMethod(request, "GET")) {
@@ -361,16 +361,7 @@ function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string 
   return lines.join("\n");
 }
 
-function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: string): string {
-  const baseUrl = origin.replace(/\/$/, "");
-  const skillUrl = `${baseUrl}/skill.md`;
-  const registerUrl = `${baseUrl}/claws/register`;
-  const countriesUrl = `${baseUrl}/countries.md`;
-  const countryExampleUrl = `${baseUrl}/countries/CO.md`;
-  const offersExampleUrl = `${baseUrl}/offers/CO.md`;
-  const connectExampleUrl = `${baseUrl}/merchants/devocion/connect.md`;
-  const agentPrompt = `Read ${skillUrl} and install ${config.brandName}. Register yourself, save the API key locally, check ${countriesUrl} to match the owner's country, then use /merchants/{slug}/connect.md before calling any Shopify Storefront MCP endpoint.`;
-
+function renderLandingPage(config: ReturnType<typeof readDeployConfig>): string {
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -379,275 +370,54 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
     <title>${config.brandName}</title>
     <style>
       :root {
-        color-scheme: dark light;
-        --bg: #121212;
-        --bg-elevated: #1b1b1d;
-        --panel: rgba(30, 30, 33, 0.92);
-        --panel-strong: #0f1012;
-        --ink: #f0ece3;
-        --muted: #b2ada2;
-        --accent: #9ab8e2;
-        --accent-2: #4ed4c8;
-        --border: rgba(255, 247, 232, 0.12);
-        --border-strong: rgba(154, 184, 226, 0.34);
-        --shadow: 0 28px 90px rgba(0, 0, 0, 0.4);
-        --button-text: #111214;
-        --noise: radial-gradient(circle at top, rgba(154, 184, 226, 0.14), transparent 30%), linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0));
-      }
-      @media (prefers-color-scheme: light) {
-        :root {
-          --bg: #f4efe6;
-          --bg-elevated: #fbf7f0;
-          --panel: rgba(255, 252, 246, 0.92);
-          --panel-strong: #f5eee4;
-          --ink: #171513;
-          --muted: #6e665c;
-          --accent: #6b8fbe;
-          --accent-2: #0f9f95;
-          --border: rgba(27, 24, 20, 0.12);
-          --border-strong: rgba(107, 143, 190, 0.4);
-          --shadow: 0 24px 80px rgba(54, 41, 20, 0.12);
-          --button-text: #ffffff;
-          --noise: radial-gradient(circle at top, rgba(107, 143, 190, 0.14), transparent 32%), linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0));
-        }
-      }
-      :root[data-theme="light"] {
         color-scheme: light;
-        --bg: #f4efe6;
-        --bg-elevated: #fbf7f0;
-        --panel: rgba(255, 252, 246, 0.92);
-        --panel-strong: #f5eee4;
-        --ink: #171513;
-        --muted: #6e665c;
-        --accent: #6b8fbe;
-        --accent-2: #0f9f95;
-        --border: rgba(27, 24, 20, 0.12);
-        --border-strong: rgba(107, 143, 190, 0.4);
-        --shadow: 0 24px 80px rgba(54, 41, 20, 0.12);
-        --button-text: #ffffff;
-        --noise: radial-gradient(circle at top, rgba(107, 143, 190, 0.14), transparent 32%), linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0));
-      }
-      :root[data-theme="dark"] {
-        color-scheme: dark;
-      }
-      * {
-        box-sizing: border-box;
+        --bg: #f7f3ea;
+        --panel: #fffaf1;
+        --ink: #1d1b18;
+        --muted: #6a6257;
+        --accent: #b95a1f;
+        --border: #d9c7b4;
       }
       body {
         margin: 0;
-        min-height: 100vh;
-        font-family: "IBM Plex Mono", "SFMono-Regular", "Consolas", monospace;
-        background:
-          radial-gradient(circle at top, rgba(78, 212, 200, 0.08), transparent 25%),
-          radial-gradient(circle at 80% 0%, rgba(154, 184, 226, 0.18), transparent 30%),
-          var(--bg);
+        font-family: "Iowan Old Style", "Palatino Linotype", serif;
+        background: radial-gradient(circle at top, #fff7ea, var(--bg));
         color: var(--ink);
-        transition: background 180ms ease, color 180ms ease;
       }
       main {
-        max-width: 1120px;
+        max-width: 1040px;
         margin: 0 auto;
-        padding: 34px 20px 64px;
+        padding: 56px 20px 72px;
       }
-      .shell {
+      article {
+        background: color-mix(in srgb, var(--panel) 92%, white);
         border: 1px solid var(--border);
-        border-radius: 24px;
-        padding: 18px;
-        background: var(--noise), var(--bg-elevated);
-        box-shadow: var(--shadow);
-      }
-      .topbar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 18px;
-        padding: 0 4px;
-      }
-      .brand {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        font-size: 0.92rem;
-        color: var(--muted);
-        text-transform: lowercase;
-      }
-      .brand strong {
-        color: var(--ink);
-        font-size: 1rem;
-      }
-      .theme-toggle {
-        border: 1px solid var(--border);
-        background: transparent;
-        color: var(--ink);
-        border-radius: 999px;
-        padding: 9px 12px;
-        font: inherit;
-        cursor: pointer;
-      }
-      .grid {
+        border-radius: 20px;
+        padding: 28px;
+        box-shadow: 0 18px 50px rgba(26, 20, 15, 0.08);
         display: grid;
-        gap: 18px;
-      }
-      .hero,
-      .lower-grid > section,
-      .mascot-panel {
-        border: 1px solid var(--border);
-        background: var(--panel);
-        border-radius: 18px;
-      }
-      .hero {
-        padding: 18px;
-        display: grid;
-        gap: 18px;
+        gap: 24px;
       }
       @media (min-width: 860px) {
-        .grid {
-          grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
+        article {
+          grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
           align-items: start;
         }
       }
-      .eyebrow {
-        color: var(--muted);
-        font-size: 0.88rem;
-        margin: 0;
+      .copy {
+        min-width: 0;
       }
-      h1,
-      h2,
-      h3,
-      p,
-      pre,
-      ol {
-        margin: 0;
-      }
-      h1 {
-        font-size: clamp(2.3rem, 8vw, 4.9rem);
-        line-height: 0.95;
-        letter-spacing: -0.05em;
-        max-width: 11ch;
-      }
-      .hero-copy {
-        display: grid;
-        gap: 14px;
-      }
-      .hero-copy p {
-        max-width: 58ch;
-        color: var(--muted);
-      }
-      .prompt-card {
-        border: 1px solid var(--border-strong);
-        background: var(--panel-strong);
-        border-radius: 16px;
+      .mascot-panel {
+        background: linear-gradient(180deg, rgba(255, 246, 233, 0.95), rgba(240, 227, 206, 0.92));
+        border: 1px solid var(--border);
+        border-radius: 18px;
         padding: 14px;
-        overflow: hidden;
-      }
-      .prompt-label {
-        color: var(--muted);
-        font-size: 0.84rem;
-        margin-bottom: 10px;
-      }
-      .prompt-card pre {
-        white-space: pre-wrap;
-        word-break: break-word;
-        color: var(--accent-2);
-        font-size: 1rem;
-        line-height: 1.55;
-      }
-      .actions {
-        display: flex;
-        gap: 12px;
-        flex-wrap: wrap;
-      }
-      .button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 44px;
-        padding: 11px 14px;
-        border: 1px solid var(--border-strong);
-        border-radius: 12px;
-        color: var(--ink);
-        text-decoration: none;
-        font-size: 0.95rem;
-      }
-      .button.primary {
-        background: var(--accent);
-        color: var(--button-text);
-      }
-      .muted {
-        color: var(--muted);
-      }
-      a {
-        color: var(--ink);
-      }
-      .lower-grid {
-        display: grid;
-        gap: 18px;
-      }
-      @media (min-width: 860px) {
-        .lower-grid {
-          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        }
-      }
-      .lower-grid > section,
-      .mascot-panel {
-        padding: 18px;
-      }
-      .steps {
-        list-style: none;
-        display: grid;
-        gap: 14px;
-        padding: 0;
-      }
-      .steps li {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 12px;
-        align-items: start;
-      }
-      .step-number {
-        min-width: 2rem;
-        height: 2rem;
-        border-radius: 10px;
-        border: 1px solid var(--border-strong);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--accent);
-        font-weight: 700;
-      }
-      .step-copy {
-        display: grid;
-        gap: 6px;
-      }
-      .step-copy strong,
-      h2,
-      h3 {
-        color: var(--ink);
-      }
-      .step-copy p,
-      .detail-list li,
-      .terminal p {
-        color: var(--muted);
-      }
-      .detail-list {
-        list-style: "> ";
-        margin: 14px 0 0;
-        padding-left: 18px;
-        display: grid;
-        gap: 10px;
-      }
-      .mascot-panel {
-        display: grid;
-        gap: 16px;
-        align-content: start;
       }
       .mascot-frame {
         aspect-ratio: 4 / 5;
         border-radius: 14px;
         overflow: hidden;
-        background: var(--panel-strong);
-        border: 1px solid var(--border);
+        background: #efe4d2;
       }
       .mascot-frame img {
         width: 100%;
@@ -655,186 +425,57 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
         object-fit: cover;
         display: block;
       }
-      .terminal {
-        border: 1px solid var(--border);
-        background: var(--panel-strong);
-        border-radius: 14px;
-        padding: 14px;
-        display: grid;
-        gap: 8px;
+      h1 {
+        margin: 0 0 12px;
+        font-size: clamp(2.2rem, 6vw, 4rem);
+        line-height: 0.95;
       }
-      .terminal code,
-      .inline-code {
-        background: rgba(255, 255, 255, 0.06);
-        padding: 0.2rem 0.35rem;
-        border-radius: 6px;
-        font-size: 0.95em;
+      p {
+        font-size: 1.05rem;
+        line-height: 1.6;
       }
-      .resource-list {
-        display: grid;
-        gap: 10px;
-      }
-      .resource-list a {
-        text-decoration: none;
-      }
-      .resource-item {
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 12px 13px;
-        background: rgba(255, 255, 255, 0.02);
-      }
-      .resource-item strong {
-        display: block;
-        margin-bottom: 4px;
-      }
-      .resource-item span {
+      .muted {
         color: var(--muted);
-        display: block;
-        word-break: break-word;
       }
-      @media (max-width: 759px) {
-        main {
-          padding: 20px 12px 42px;
-        }
-        .shell,
-        .hero,
-        .lower-grid > section,
-        .mascot-panel {
-          padding-left: 14px;
-          padding-right: 14px;
-        }
+      .links {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 28px;
       }
-      @media (prefers-reduced-motion: reduce) {
-        * {
-          scroll-behavior: auto;
-          transition: none !important;
-        }
+      a {
+        color: var(--ink);
+        text-decoration: none;
+        border-bottom: 2px solid var(--accent);
+        padding-bottom: 2px;
+      }
+      code {
+        background: rgba(29, 27, 24, 0.06);
+        padding: 0.2rem 0.4rem;
+        border-radius: 6px;
       }
     </style>
   </head>
   <body>
     <main>
-      <div class="shell">
-        <header class="topbar">
-          <div class="brand">
-            <span>[ deploy ]</span>
-            <strong>${config.brandName}</strong>
+      <article>
+        <div class="copy">
+          <p class="muted">Agent-facing commerce deploy</p>
+          <h1>${config.brandName}</h1>
+          <p>${config.verticalSummary}</p>
+          <p>Install the deploy into a lobster with <code>/skill.md</code>, register the claw, discover merchants by country, then hand off catalog and cart work to the selected merchant’s Storefront MCP endpoint.</p>
+          <div class="links">
+            <a href="/skill.md">Open skill.md</a>
+            <a href="/countries/US">Example country JSON</a>
+            <a href="/offers/US">Example offers JSON</a>
           </div>
-          <button class="theme-toggle" type="button" data-theme-toggle>toggle theme</button>
-        </header>
-
-        <div class="grid">
-          <section class="hero">
-            <div class="hero-copy">
-              <p class="eyebrow">Send your AI agent to ${config.brandName}</p>
-              <h1>give your lobster one clear install target.</h1>
-              <p>${config.verticalSummary}</p>
-              <p>Use the prompt below to install the deploy into a lobster, then let the lobster register itself, discover merchants, and route shopping through merchant Shopify Storefront MCP endpoints.</p>
-            </div>
-
-            <div class="prompt-card">
-              <p class="prompt-label">Prompt to send to your AI agent</p>
-              <pre>${agentPrompt}</pre>
-            </div>
-
-            <div class="actions">
-              <a class="button primary" href="/skill.md">open skill.md</a>
-              <a class="button" href="${countriesUrl}">see supported countries</a>
-            </div>
-          </section>
-
-          <aside class="mascot-panel">
-            <div class="mascot-frame">
-              <img src="${config.mascotUrl}" alt="${config.brandName} mascot">
-            </div>
-            <div class="terminal">
-              <p><strong>operator note</strong></p>
-              <p>Keep the deploy instructions short and literal. The lobster should read the skill, register once, save its key, then move to country and merchant selection.</p>
-            </div>
-          </aside>
         </div>
-
-        <div class="lower-grid">
-          <section>
-            <h2>Setup flow</h2>
-            <ol class="steps">
-              <li>
-                <span class="step-number">1</span>
-                <div class="step-copy">
-                  <strong>Send the install prompt to your lobster</strong>
-                  <p>Start with <span class="inline-code">${skillUrl}</span>. The skill is the canonical contract for registration, discovery, and Shopify MCP routing.</p>
-                </div>
-              </li>
-              <li>
-                <span class="step-number">2</span>
-                <div class="step-copy">
-                  <strong>Let it register and save its one-time key</strong>
-                  <p>The lobster should call <span class="inline-code">${registerUrl}</span>, keep the returned credentials locally, and avoid asking for them again.</p>
-                </div>
-              </li>
-              <li>
-                <span class="step-number">3</span>
-                <div class="step-copy">
-                  <strong>Match the owner's country before shopping</strong>
-                  <p>Have the lobster read <span class="inline-code">${countriesUrl}</span>, then fetch a country page and any active offers before choosing a merchant.</p>
-                </div>
-              </li>
-              <li>
-                <span class="step-number">4</span>
-                <div class="step-copy">
-                  <strong>Resolve the merchant before opening Shopify MCP</strong>
-                  <p>The lobster must call a merchant connect page first, then use the returned Storefront MCP endpoint for live catalog, cart, and checkout work.</p>
-                </div>
-              </li>
-            </ol>
-          </section>
-
-          <section>
-            <h2>Quick references</h2>
-            <div class="resource-list">
-              <a class="resource-item" href="${skillUrl}">
-                <strong>Install contract</strong>
-                <span>${skillUrl}</span>
-              </a>
-              <a class="resource-item" href="${countryExampleUrl}">
-                <strong>Country shortlist example</strong>
-                <span>${countryExampleUrl}</span>
-              </a>
-              <a class="resource-item" href="${offersExampleUrl}">
-                <strong>Offer feed example</strong>
-                <span>${offersExampleUrl}</span>
-              </a>
-              <a class="resource-item" href="${connectExampleUrl}">
-                <strong>Merchant connect example</strong>
-                <span>${connectExampleUrl}</span>
-              </a>
-            </div>
-
-            <ul class="detail-list">
-              <li>Discovery happens here. Product truth and cart truth stay with the merchant Shopify Storefront MCP.</li>
-              <li>The lobster should attach <span class="inline-code">lb_source__ = ${config.deployId}</span> when updating carts.</li>
-              <li>The owner finishes payment in Shopify checkout. The lobster stops at checkout handoff.</li>
-            </ul>
-          </section>
-        </div>
-      </div>
-      <script>
-        (() => {
-          const root = document.documentElement;
-          const button = document.querySelector("[data-theme-toggle]");
-          const storageKey = "lobsterbazaar-theme";
-          const savedTheme = localStorage.getItem(storageKey);
-          if (savedTheme === "light" || savedTheme === "dark") {
-            root.dataset.theme = savedTheme;
-          }
-          if (!button) return;
-          button.addEventListener("click", () => {
-            const nextTheme = root.dataset.theme === "light" ? "dark" : "light";
-            root.dataset.theme = nextTheme;
-            localStorage.setItem(storageKey, nextTheme);
-          });
-        })();
-      </script>
+        <aside class="mascot-panel">
+          <div class="mascot-frame">
+            <img src="${config.mascotUrl}" alt="${config.brandName} mascot">
+          </div>
+        </aside>
+      </article>
     </main>
   </body>
 </html>`;

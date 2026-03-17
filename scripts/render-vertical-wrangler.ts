@@ -7,6 +7,7 @@ interface DeployConfigFile {
   vertical_id: string;
   brand_name: string;
   vertical_name?: string;
+  directory_subtitle?: string;
   vertical_summary: string;
   skill_buying_targets?: string;
   emoji?: string;
@@ -18,6 +19,7 @@ interface DirectoryVerticalEntry {
   brandName: string;
   domain: string;
   verticalName?: string;
+  directorySubtitle?: string;
   emoji?: string;
 }
 
@@ -136,6 +138,10 @@ async function loadDirectoryVerticals(resolvedVerticalDir: string): Promise<Dire
       verticalName:
         typeof deployConfig.vertical_name === "string" && deployConfig.vertical_name.trim()
           ? deployConfig.vertical_name.trim()
+          : undefined,
+      directorySubtitle:
+        typeof deployConfig.directory_subtitle === "string" && deployConfig.directory_subtitle.trim()
+          ? deployConfig.directory_subtitle.trim()
           : undefined,
       emoji: typeof deployConfig.emoji === "string" && deployConfig.emoji.trim() ? deployConfig.emoji.trim() : undefined
     });

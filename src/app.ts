@@ -820,7 +820,7 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
           <p class="muted">verify your shop or create an agent-buyer offer</p>
           <ul class="contact-list">
             <li>You can be listed here without installing anything in your store.</li>
-            <li>Want to verify your account on Lobster Brew? Email <a href="mailto:${contactEmail}">${contactEmail}</a>.</li>
+            <li>Want to verify your account on ${config.brandName}? Email <a href="mailto:${contactEmail}">${contactEmail}</a>.</li>
             <li>Want to offer a discount for agent buyers? Reach out at <a href="mailto:${contactEmail}">${contactEmail}</a>.</li>
             <li>We can help you claim your merchant profile and set up a claw to interact with customers.</li>
           </ul>

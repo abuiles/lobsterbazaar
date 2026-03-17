@@ -77,6 +77,7 @@ export interface CountryMerchantSummary {
   displayName: string;
   storeUrl: string;
   summary: string;
+  description: string;
   activeOffersCount: number;
 }
 
@@ -150,6 +151,15 @@ export interface SkillTemplateInput {
   merchantConnectPath: string;
 }
 
+export interface DirectoryVertical {
+  deployId: string;
+  brandName: string;
+  domain: string;
+  url: string;
+  verticalName?: string;
+  emoji?: string;
+}
+
 export interface DeployConfig {
   brandName: string;
   deployId: string;
@@ -158,6 +168,7 @@ export interface DeployConfig {
   skillBuyingTargets?: string;
   mascotUrl: string;
   emoji: string;
+  directoryVerticals: DirectoryVertical[];
 }
 
 export interface DeployFileConfig extends DeployConfig {

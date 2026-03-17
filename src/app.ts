@@ -109,6 +109,7 @@ export function createApp(dependencies: AppDependencies) {
               display_name: merchant.displayName,
               store_url: merchant.storeUrl,
               summary: merchant.summary,
+              description: merchant.description,
               active_offers_count: merchant.activeOffersCount
             }))
           });
@@ -286,6 +287,7 @@ function renderCountryMarkdown(artifact: {
     slug: string;
     storeUrl: string;
     summary: string;
+    description: string;
     activeOffersCount: number;
   }>;
 }, origin: string): string {
@@ -297,8 +299,9 @@ function renderCountryMarkdown(artifact: {
   const merchants = artifact.merchants.map((merchant) => {
     const offerHint = merchant.activeOffersCount === 0 ? "no active offers" : `${merchant.activeOffersCount} active offer(s)`;
     const connectPath = `/merchants/${merchant.slug}/connect.md`;
+    const descriptionLine = merchant.description ? `\n  - description: ${merchant.description}` : "";
     const summaryLine = merchant.summary ? `\n  - summary: ${merchant.summary}` : "";
-    return `- ${merchant.slug}: ${offerHint}${summaryLine}\n  - store_url: \`${merchant.storeUrl}\`\n  - connect_path: \`${connectPath}\`\n  - connect_url: \`${origin}${connectPath}\``;
+    return `- ${merchant.slug}: ${offerHint}${descriptionLine}${summaryLine}\n  - store_url: \`${merchant.storeUrl}\`\n  - connect_path: \`${connectPath}\`\n  - connect_url: \`${origin}${connectPath}\``;
   });
 
   return `${header}\n\n${merchants.join("\n\n")}`;
@@ -380,10 +383,45 @@ function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string 
   return lines.join("\n");
 }
 
+function renderDirectoryCards(config: ReturnType<typeof readDeployConfig>): string {
+  const directoryVerticals = [...config.directoryVerticals].sort((left, right) => {
+    if (left.deployId === config.deployId) {
+      return -1;
+    }
+    if (right.deployId === config.deployId) {
+      return 1;
+    }
+    return left.brandName.localeCompare(right.brandName);
+  });
+
+  if (directoryVerticals.length === 0) {
+    return `<p class="directory-empty muted">No verticals are published yet.</p>`;
+  }
+
+  return directoryVerticals.map((vertical) => {
+    const isCurrent = vertical.deployId === config.deployId;
+    const badge = isCurrent ? "current" : "open";
+    const subtitle = vertical.verticalName ? `${vertical.verticalName} vertical` : "Live vertical";
+    const emoji = vertical.emoji || "🦞";
+    return `
+      <a class="directory-card${isCurrent ? " is-active" : ""}" href="${vertical.url}">
+        <span class="directory-emoji">${emoji}</span>
+        <span class="directory-meta">
+          <strong>${vertical.brandName}</strong>
+          <span>${subtitle}</span>
+        </span>
+        <span class="directory-domain">${vertical.domain}</span>
+        <span class="directory-badge">${badge}</span>
+      </a>
+    `;
+  }).join("");
+}
+
 function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: string): string {
   const skillUrl = `${origin.replace(/\/$/, "")}/skill.md`;
   const installInstruction = `Read ${skillUrl} and follow the instructions to join ${config.brandName}.`;
   const contactEmail = "hello@lobsterstores.com";
+  const directoryCards = renderDirectoryCards(config);
 
   return `<!doctype html>
 <html lang="en">
@@ -531,6 +569,37 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
       .prompt-title {
         color: var(--muted);
         font-size: 0.92rem;
+        margin: 0;
+      }
+      .surface-switcher {
+        display: inline-flex;
+        gap: 8px;
+        padding: 6px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .surface-tab {
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        border-radius: 999px;
+        padding: 8px 14px;
+        font: inherit;
+        cursor: pointer;
+        text-transform: lowercase;
+      }
+      .surface-tab.is-active {
+        background: var(--prompt);
+        color: var(--ink);
+        box-shadow: inset 0 0 0 1px var(--border);
+      }
+      .surface-panel {
+        display: grid;
+        gap: 14px;
+      }
+      .surface-panel[hidden] {
+        display: none;
       }
       .prompt {
         background: var(--prompt);
@@ -583,6 +652,63 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
       }
       .caption {
         max-width: 54ch;
+      }
+      .directory-intro {
+        display: grid;
+        gap: 6px;
+      }
+      .directory-grid {
+        display: grid;
+        gap: 12px;
+      }
+      .directory-card {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 12px 14px;
+        align-items: center;
+        padding: 14px 16px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        text-decoration: none;
+        color: inherit;
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .directory-card.is-active {
+        border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+        background: color-mix(in srgb, var(--prompt) 88%, transparent);
+      }
+      .directory-card:hover {
+        border-color: color-mix(in srgb, var(--ink) 20%, var(--border));
+      }
+      .directory-emoji {
+        font-size: 1.25rem;
+      }
+      .directory-meta {
+        min-width: 0;
+        display: grid;
+        gap: 2px;
+      }
+      .directory-meta strong {
+        font-size: 1rem;
+      }
+      .directory-meta span,
+      .directory-domain {
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+      .directory-domain {
+        grid-column: 2;
+      }
+      .directory-badge {
+        justify-self: start;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 3px 8px;
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+      .directory-empty {
+        margin: 0;
       }
       .contact-grid {
         margin-top: 18px;
@@ -641,17 +767,33 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
           <p class="caption muted">${config.verticalSummary}</p>
           <p class="install-copy">Send your agent to ${config.brandName} ${config.emoji}</p>
 <p>Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL, save credentials, and follow instructions (any).</p>
-          <div class="prompt">
-            <div class="prompt-bar">
-              <button class="copy-button" type="button" data-copy-install>copy</button>
-            </div>
-            <pre data-install-instruction>${installInstruction}</pre>
+          <div class="surface-switcher" role="tablist" aria-label="Deploy surfaces">
+            <button class="surface-tab is-active" type="button" role="tab" aria-selected="true" data-surface-tab="install">install skill</button>
+            <button class="surface-tab" type="button" role="tab" aria-selected="false" data-surface-tab="directory">directory</button>
           </div>
-          <ol class="steps">
-            <li><strong>1.</strong><span>Send this to your agent</span></li>
-            <li><strong>2.</strong><span>Let the agent register once and save its key</span></li>
-            <li><strong>3.</strong><span>Then the agent can start shopping through the right merchant MCP</span></li>
-          </ol>
+          <section class="surface-panel is-active" data-surface-panel="install" role="tabpanel">
+            <p class="prompt-title">Skill install instruction</p>
+            <div class="prompt">
+              <div class="prompt-bar">
+                <button class="copy-button" type="button" data-copy-install>copy</button>
+              </div>
+              <pre data-install-instruction>${installInstruction}</pre>
+            </div>
+            <ol class="steps">
+              <li><strong>1.</strong><span>Send this to your agent</span></li>
+              <li><strong>2.</strong><span>Let the agent register once and save its key</span></li>
+              <li><strong>3.</strong><span>Then the agent can start shopping through the right merchant MCP</span></li>
+            </ol>
+          </section>
+          <section class="surface-panel" data-surface-panel="directory" role="tabpanel" hidden>
+            <div class="directory-intro">
+              <p class="prompt-title">All Lobster Verticals</p>
+              <p class="muted">Jump across the live category deploys from one place.</p>
+            </div>
+            <div class="directory-grid">
+              ${directoryCards}
+            </div>
+          </section>
         </div>
         <aside class="mascot-panel">
           <div class="mascot-frame">
@@ -690,11 +832,33 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
           const button = document.querySelector("[data-theme-toggle]");
           const copyButton = document.querySelector("[data-copy-install]");
           const instruction = document.querySelector("[data-install-instruction]");
+          const surfaceTabs = Array.from(document.querySelectorAll("[data-surface-tab]"));
+          const surfacePanels = Array.from(document.querySelectorAll("[data-surface-panel]"));
           const storageKey = "lobsterbazaar-theme";
           const savedTheme = localStorage.getItem(storageKey);
           if (savedTheme === "light" || savedTheme === "dark") {
             root.dataset.theme = savedTheme;
           }
+          const setSurface = (nextSurface) => {
+            surfaceTabs.forEach((tab) => {
+              const isActive = tab.dataset.surfaceTab === nextSurface;
+              tab.classList.toggle("is-active", isActive);
+              tab.setAttribute("aria-selected", isActive ? "true" : "false");
+            });
+            surfacePanels.forEach((panel) => {
+              const isActive = panel.dataset.surfacePanel === nextSurface;
+              panel.classList.toggle("is-active", isActive);
+              panel.hidden = !isActive;
+            });
+          };
+          surfaceTabs.forEach((tab) => {
+            tab.addEventListener("click", () => {
+              if (tab.dataset.surfaceTab) {
+                setSurface(tab.dataset.surfaceTab);
+              }
+            });
+          });
+          setSurface("install");
           if (button) {
             button.addEventListener("click", () => {
               const nextTheme = root.dataset.theme === "light" ? "dark" : "light";

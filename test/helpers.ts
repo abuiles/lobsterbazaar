@@ -98,7 +98,8 @@ export async function createTestHarness(options: TestHarnessOptions = {}) {
       verticalSummary: "Coffee-oriented merchant discovery for lobsters.",
       skillBuyingTargets: "coffee, subscriptions, and brewing gear",
       mascotUrl: "/assets/mascots/lobsterbazaar-default.jpg",
-      emoji: "🦞"
+      emoji: "🦞",
+      directoryVerticals: []
     },
     operatorToken: "test-operator-token",
     now: () => "2026-03-15T12:00:00Z"

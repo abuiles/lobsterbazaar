@@ -136,6 +136,7 @@ export function parseDeployConfig(text: string): DeployFileConfig {
         ? data.deploy_mascot_url.trim()
         : "/assets/mascots/lobsterbazaar-default.jpg",
     emoji: typeof data.emoji === "string" && data.emoji.trim() ? data.emoji.trim() : "🦞",
+    directoryVerticals: [],
     defaultCountries: Array.isArray(data.default_countries)
       ? data.default_countries.map((value) => normalizeCountryCode(assertString(value, "default_countries")))
       : [],

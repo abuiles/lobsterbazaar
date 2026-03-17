@@ -116,6 +116,7 @@ export class MemoryRepositories implements Repositories {
           locationsSummary: merchant.locationsSummary,
           verticalMetadata: merchant.verticalMetadata
         }),
+        description: merchant.notes,
         activeOffersCount: activeCounts.get(merchant.slug) ?? 0
       }))
       .sort(compareCountryMerchants);

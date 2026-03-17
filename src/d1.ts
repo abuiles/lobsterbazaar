@@ -183,6 +183,7 @@ export class D1Repositories implements Repositories {
            m.display_name,
            m.store_url,
            m.locations_summary,
+           m.notes,
            m.vertical_metadata_json,
            COUNT(o.offer_id) AS active_offers_count
          FROM merchants m
@@ -197,7 +198,7 @@ export class D1Repositories implements Repositories {
           AND (o.active_from IS NULL OR o.active_from <= ?2)
           AND o.valid_through >= ?2
          WHERE mc.country_code = ?1
-         GROUP BY m.slug, m.display_name, m.store_url, m.locations_summary, m.vertical_metadata_json`
+         GROUP BY m.slug, m.display_name, m.store_url, m.locations_summary, m.notes, m.vertical_metadata_json`
       )
       .bind(normalized, now)
       .all<{
@@ -205,6 +206,7 @@ export class D1Repositories implements Repositories {
         display_name: string;
         store_url: string;
         locations_summary: string | null;
+        notes: string;
         vertical_metadata_json: string;
         active_offers_count: number | string;
       }>();
@@ -218,6 +220,7 @@ export class D1Repositories implements Repositories {
           locationsSummary: row.locations_summary ?? undefined,
           verticalMetadata: JSON.parse(row.vertical_metadata_json || "{}") as Record<string, unknown>
         }),
+        description: row.notes,
         activeOffersCount: Number(row.active_offers_count ?? 0)
       }))
       .sort(compareCountryMerchants);

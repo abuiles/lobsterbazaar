@@ -27,6 +27,7 @@ interface CountryResponse {
     display_name: string;
     store_url: string;
     summary: string;
+    description: string;
     active_offers_count: number;
   }>;
 }
@@ -174,8 +175,10 @@ describe("lobsterbazaar worker", () => {
     expect(firstMerchant?.slug).toBe("claimed-roaster");
     expect(firstMerchant?.active_offers_count).toBe(1);
     expect(firstMerchant?.summary).toBe("5+");
+    expect(firstMerchant?.description).toBe("Runs small seasonal releases.");
     expect(secondMerchant?.slug).toBe("sample-roaster");
     expect(secondMerchant?.summary).toBe("20+");
+    expect(secondMerchant?.description).toBe("Known for washed coffees and bright acidity.");
   });
 
   it("returns only active offers for the requested country", async () => {
@@ -261,10 +264,12 @@ describe("lobsterbazaar worker", () => {
 
     expect(response.status).toBe(200);
     expect(body).toContain("- claimed-roaster: 1 active offer(s)");
+    expect(body).toContain("description: Runs small seasonal releases.");
     expect(body).toContain("summary: 5+");
     expect(body).toContain("connect_path: `/merchants/claimed-roaster/connect.md`");
     expect(body).toContain("connect_url: `https://lobsterbrew.test/merchants/claimed-roaster/connect.md`");
     expect(body).toContain("- sample-roaster: no active offers");
+    expect(body).toContain("description: Known for washed coffees and bright acidity.");
     expect(body).toContain("summary: 20+");
     expect(body).toContain("connect_path: `/merchants/sample-roaster/connect.md`");
     expect(body).toContain("connect_url: `https://lobsterbrew.test/merchants/sample-roaster/connect.md`");

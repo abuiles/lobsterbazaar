@@ -259,7 +259,7 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("Read https://lobsterbrew.test/skill.md and follow the instructions to join Lobster Bazaar.");
     expect(body).toContain("Skill install instruction");
     expect(body).toContain("Let the agent register once and save its key");
-    expect(body).toContain("All Lobster Verticals");
+    expect(body).toContain("All Lobster Categories");
     expect(body).toContain("Lobster Bread");
     expect(body).toContain("lobsterbread.com");
     expect(body).toContain("host-agnostic install surface:");

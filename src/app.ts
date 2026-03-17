@@ -824,8 +824,8 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
           </section>
           <section class="surface-panel" data-surface-panel="directory" role="tabpanel" hidden>
             <div class="directory-intro">
-              <p class="prompt-title">All Lobster Verticals</p>
-              <p class="muted">Jump across the live vertical deploys from one place.</p>
+              <p class="prompt-title">All Lobster Categories</p>
+              <p class="muted">Browse every lobster category and find the right shop faster.</p>
             </div>
             <div class="directory-grid">
               ${directoryCards}

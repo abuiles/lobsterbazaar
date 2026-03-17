@@ -99,7 +99,32 @@ export async function createTestHarness(options: TestHarnessOptions = {}) {
       skillBuyingTargets: "coffee, subscriptions, and brewing gear",
       mascotUrl: "/assets/mascots/lobsterbazaar-default.jpg",
       emoji: "🦞",
-      directoryVerticals: []
+      directoryVerticals: [
+        {
+          deployId: "lobsterbrew",
+          brandName: "Lobster Bazaar",
+          domain: "lobsterbrew.test",
+          url: "https://lobsterbrew.test",
+          verticalName: "Coffee",
+          emoji: "🦞☕️"
+        },
+        {
+          deployId: "lobsterbread",
+          brandName: "Lobster Bread",
+          domain: "lobsterbread.com",
+          url: "https://lobsterbread.com",
+          verticalName: "Bread",
+          emoji: "🦞🥐"
+        },
+        {
+          deployId: "lobsterwell",
+          brandName: "Lobster Well",
+          domain: "lobsterwell.com",
+          url: "https://lobsterwell.com",
+          verticalName: "Well",
+          emoji: "🦞🧘"
+        }
+      ]
     },
     operatorToken: "test-operator-token",
     now: () => "2026-03-15T12:00:00Z"

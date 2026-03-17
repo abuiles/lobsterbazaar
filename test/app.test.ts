@@ -238,7 +238,11 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("Send your agent to Lobster Bazaar");
     expect(body).toContain("Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL, save credentials, and follow instructions (any).");
     expect(body).toContain("Read https://lobsterbrew.test/skill.md and follow the instructions to join Lobster Bazaar.");
+    expect(body).toContain("Skill install instruction");
     expect(body).toContain("Let the agent register once and save its key");
+    expect(body).toContain("All Lobster Categories");
+    expect(body).toContain("Lobster Bread");
+    expect(body).toContain("lobsterbread.com");
     expect(body).toContain("host-agnostic install surface:");
     expect(body).toContain("toggle theme");
     expect(body).toContain("hello@lobsterstores.com");

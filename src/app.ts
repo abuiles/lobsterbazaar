@@ -395,13 +395,13 @@ function renderDirectoryCards(config: ReturnType<typeof readDeployConfig>): stri
   });
 
   if (directoryVerticals.length === 0) {
-    return `<p class="directory-empty muted">No verticals are published yet.</p>`;
+    return `<p class="directory-empty muted">No categories are published yet.</p>`;
   }
 
   return directoryVerticals.map((vertical) => {
     const isCurrent = vertical.deployId === config.deployId;
     const badge = isCurrent ? "current" : "open";
-    const subtitle = vertical.verticalName ? `${vertical.verticalName} vertical` : "Live vertical";
+    const subtitle = vertical.verticalName ? `${vertical.verticalName} category` : "Live category";
     const emoji = vertical.emoji || "🦞";
     return `
       <a class="directory-card${isCurrent ? " is-active" : ""}" href="${vertical.url}">
@@ -787,7 +787,7 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
           </section>
           <section class="surface-panel" data-surface-panel="directory" role="tabpanel" hidden>
             <div class="directory-intro">
-              <p class="prompt-title">All Lobster Verticals</p>
+              <p class="prompt-title">All Lobster Categories</p>
               <p class="muted">Jump across the live category deploys from one place.</p>
             </div>
             <div class="directory-grid">

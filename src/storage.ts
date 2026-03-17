@@ -1,6 +1,7 @@
 import type {
   Claw,
   CountryArtifact,
+  FeaturedMerchantSummary,
   CountryMerchantSummary,
   MetricsSnapshot,
   Merchant,
@@ -44,6 +45,7 @@ export interface Repositories {
   getMerchant(slug: string): Promise<Merchant | null>;
   supportsCountry(countryCode: string): Promise<boolean>;
   listCountryMerchants(countryCode: string, now: string): Promise<CountryMerchantSummary[]>;
+  listFeaturedMerchants(now: string): Promise<FeaturedMerchantSummary[]>;
   listActiveOffers(countryCode: string, now: string): Promise<PublicOffer[]>;
   listActiveOffersForMerchant(merchantSlug: string, now: string): Promise<PublicOffer[]>;
   listMerchantArtifacts(now: string, since?: string): Promise<MerchantArtifact[]>;

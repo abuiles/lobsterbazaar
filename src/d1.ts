@@ -2,6 +2,7 @@ import { hashSecret } from "./crypto";
 import type {
   Claw,
   CountryMerchantSummary,
+  FeaturedMerchantSummary,
   MetricsSnapshot,
   Merchant,
   MerchantArtifact,
@@ -208,6 +209,59 @@ export class D1Repositories implements Repositories {
          GROUP BY m.slug, m.display_name, m.store_url, m.locations_summary, m.notes, m.vertical_metadata_json`
       )
       .bind(normalized, now)
+      .all<{
+        slug: string;
+        display_name: string;
+        store_url: string;
+        locations_summary: string | null;
+        notes: string;
+        vertical_metadata_json: string;
+        active_offers_count: number | string;
+      }>();
+
+    return (result.results ?? [])
+      .map((row) => {
+        const verticalMetadata = JSON.parse(row.vertical_metadata_json || "{}") as Record<string, unknown>;
+
+        return {
+          slug: row.slug,
+          displayName: row.display_name,
+          storeUrl: row.store_url,
+          summary: buildPublicMerchantSummary({
+            locationsSummary: row.locations_summary ?? undefined,
+            verticalMetadata
+          }),
+          description: buildPublicMerchantDescription({
+            notes: row.notes,
+            verticalMetadata
+          }),
+          activeOffersCount: Number(row.active_offers_count ?? 0)
+        };
+      })
+      .sort(compareCountryMerchants);
+  }
+
+  async listFeaturedMerchants(now: string): Promise<FeaturedMerchantSummary[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT
+           m.slug,
+           m.display_name,
+           m.store_url,
+           m.locations_summary,
+           m.notes,
+           m.vertical_metadata_json,
+           COUNT(o.offer_id) AS active_offers_count
+         FROM merchants m
+         LEFT JOIN offers o
+           ON o.merchant_slug = m.slug
+          AND o.status = 'active'
+          AND (o.active_from IS NULL OR o.active_from <= ?1)
+          AND o.valid_through >= ?1
+         WHERE COALESCE(json_extract(m.vertical_metadata_json, '$.featured'), 0) = 1
+         GROUP BY m.slug, m.display_name, m.store_url, m.locations_summary, m.notes, m.vertical_metadata_json`
+      )
+      .bind(now)
       .all<{
         slug: string;
         display_name: string;

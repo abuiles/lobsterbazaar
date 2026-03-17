@@ -82,6 +82,9 @@ function parseDirectoryVerticals(
     const verticalName = typeof entry.verticalName === "string" && entry.verticalName.trim()
       ? entry.verticalName.trim()
       : undefined;
+    const directorySubtitle = typeof entry.directorySubtitle === "string" && entry.directorySubtitle.trim()
+      ? entry.directorySubtitle.trim()
+      : undefined;
     const emoji = typeof entry.emoji === "string" && entry.emoji.trim() ? entry.emoji.trim() : undefined;
     const domain = normalizeDirectoryDomain(deployDomain);
 
@@ -95,6 +98,7 @@ function parseDirectoryVerticals(
       domain,
       url: buildDirectoryUrl(deployDomain),
       verticalName,
+      directorySubtitle,
       emoji
     });
   }

@@ -35,7 +35,9 @@ export async function createTestHarness(options: TestHarnessOptions = {}) {
     tags: ["coffee", "specialty"],
     claimContact: "hello@sample-roaster.com",
     claimStatus: "unclaimed",
-    verticalMetadata: {}
+    verticalMetadata: {
+      featured: true
+    }
   });
 
   await repositories.putMerchant({
@@ -118,6 +120,7 @@ export async function createTestHarness(options: TestHarnessOptions = {}) {
           domain: "lobsterbrew.test",
           url: "https://lobsterbrew.test",
           verticalName: "Coffee",
+          directorySubtitle: "coffee, roasters, cafes",
           emoji: "🦞☕️"
         },
         {
@@ -126,6 +129,7 @@ export async function createTestHarness(options: TestHarnessOptions = {}) {
           domain: "lobsterbread.com",
           url: "https://lobsterbread.com",
           verticalName: "Bread",
+          directorySubtitle: "bread, bakeries, pastries",
           emoji: "🦞🥐"
         },
         {
@@ -134,6 +138,7 @@ export async function createTestHarness(options: TestHarnessOptions = {}) {
           domain: "lobsterwell.com",
           url: "https://lobsterwell.com",
           verticalName: "Well",
+          directorySubtitle: "wellness, self-care, healthy routines",
           emoji: "🦞🧘"
         }
       ]

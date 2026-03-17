@@ -81,6 +81,15 @@ export interface CountryMerchantSummary {
   activeOffersCount: number;
 }
 
+export interface FeaturedMerchantSummary {
+  slug: string;
+  displayName: string;
+  storeUrl: string;
+  summary: string;
+  description: string;
+  activeOffersCount: number;
+}
+
 export interface PublicOffer {
   offerId: string;
   merchantSlug: string;
@@ -157,6 +166,7 @@ export interface DirectoryVertical {
   domain: string;
   url: string;
   verticalName?: string;
+  directorySubtitle?: string;
   emoji?: string;
 }
 

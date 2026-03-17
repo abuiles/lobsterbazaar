@@ -1,6 +1,6 @@
 import { ensureCountryArtifact, ensureMerchantArtifact, ensureOffersArtifact, ensureSkillArtifact, materializePublicArtifacts } from "./artifacts";
 import { readDeployConfig, type Env } from "./config";
-import type { MerchantConnectPayload, RegisterClawInput } from "./domain";
+import type { FeaturedMerchantSummary, MerchantConnectPayload, RegisterClawInput } from "./domain";
 import { badRequest, notFound } from "./errors";
 import { errorResponse, html, isMethod, json, parseJson, text } from "./http";
 import { prepareRequestMetric, recordRequestMetric } from "./metrics";
@@ -50,7 +50,8 @@ export function createApp(dependencies: AppDependencies) {
         }
 
         if (normalizedPath === "/" && isMethod(request, "GET")) {
-          response = html(renderLandingPage(dependencies.config, url.origin));
+          const featuredMerchants = await dependencies.repositories.listFeaturedMerchants(dependencies.now());
+          response = html(renderLandingPage(dependencies.config, url.origin, featuredMerchants));
         } else if (normalizedPath === "/skill" && isMethod(request, "GET")) {
           const skill = await ensureSkillArtifact(dependencies.artifacts, {
             brandName: dependencies.config.brandName,
@@ -443,7 +444,7 @@ function renderDirectoryCards(config: ReturnType<typeof readDeployConfig>): stri
   return directoryVerticals.map((vertical) => {
     const isCurrent = vertical.deployId === config.deployId;
     const badge = isCurrent ? "current" : "open";
-    const subtitle = vertical.verticalName ? `${vertical.verticalName} category` : "Live category";
+    const subtitle = vertical.directorySubtitle || (vertical.verticalName ? `${vertical.verticalName} category` : "Live category");
     const emoji = vertical.emoji || "🦞";
     return `
       <a class="directory-card${isCurrent ? " is-active" : ""}" href="${vertical.url}">
@@ -459,11 +460,75 @@ function renderDirectoryCards(config: ReturnType<typeof readDeployConfig>): stri
   }).join("");
 }
 
-function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: string): string {
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function getStoreDomain(storeUrl: string): string {
+  try {
+    return new URL(storeUrl).host;
+  } catch {
+    return storeUrl.replace(/^[a-z]+:\/\//i, "").replace(/\/.*$/, "");
+  }
+}
+
+function renderFeaturedMerchantCards(featuredMerchants: FeaturedMerchantSummary[]): string {
+  return featuredMerchants.map((merchant) => {
+    const description = merchant.description.trim();
+    const summary = merchant.summary.trim();
+    const domain = getStoreDomain(merchant.storeUrl);
+    const offerHint = merchant.activeOffersCount > 0
+      ? `${merchant.activeOffersCount} active offer${merchant.activeOffersCount === 1 ? "" : "s"}`
+      : "";
+    const summaryMarkup = summary ? `<span class="featured-summary">${escapeHtml(summary)}</span>` : "";
+    const descriptionMarkup = description ? `<span class="featured-description">${escapeHtml(description)}</span>` : "";
+    const offerMarkup = offerHint ? `<span class="featured-offers">${escapeHtml(offerHint)}</span>` : "";
+
+    return `
+      <a class="featured-card" href="${escapeHtml(merchant.storeUrl)}">
+        <span class="featured-header">
+          <strong>${escapeHtml(merchant.displayName)}</strong>
+          <span class="featured-domain">${escapeHtml(domain)}</span>
+        </span>
+        ${summaryMarkup}
+        ${descriptionMarkup}
+        ${offerMarkup}
+      </a>
+    `;
+  }).join("");
+}
+
+function renderLandingPage(
+  config: ReturnType<typeof readDeployConfig>,
+  origin: string,
+  featuredMerchants: FeaturedMerchantSummary[]
+): string {
   const skillUrl = `${origin.replace(/\/$/, "")}/skill.md`;
   const installInstruction = `Read ${skillUrl} and follow the instructions to join ${config.brandName}.`;
   const contactEmail = "hello@lobsterstores.com";
   const directoryCards = renderDirectoryCards(config);
+  const featuredCards = renderFeaturedMerchantCards(featuredMerchants);
+  const featuredTab = featuredMerchants.length > 0
+    ? '<button class="surface-tab" type="button" role="tab" aria-selected="false" data-surface-tab="featured">featured merchants</button>'
+    : "";
+  const featuredPanel = featuredMerchants.length > 0
+    ? `
+          <section class="surface-panel" data-surface-panel="featured" role="tabpanel" hidden>
+            <div class="directory-intro">
+              <p class="prompt-title">Featured Merchants</p>
+              <p class="muted">A few shops worth opening first.</p>
+            </div>
+            <div class="featured-grid">
+              ${featuredCards}
+            </div>
+          </section>
+        `
+    : "";
 
   return `<!doctype html>
 <html lang="en">
@@ -703,6 +768,43 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
         display: grid;
         gap: 12px;
       }
+      .featured-grid {
+        display: grid;
+        gap: 12px;
+      }
+      .featured-card {
+        display: grid;
+        gap: 6px;
+        padding: 14px 16px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        text-decoration: none;
+        color: inherit;
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .featured-card:hover {
+        border-color: color-mix(in srgb, var(--ink) 20%, var(--border));
+      }
+      .featured-header {
+        display: grid;
+        gap: 2px;
+      }
+      .featured-header strong {
+        font-size: 1rem;
+      }
+      .featured-domain,
+      .featured-summary,
+      .featured-description,
+      .featured-offers {
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+      .featured-description {
+        line-height: 1.5;
+      }
+      .featured-offers {
+        color: var(--accent);
+      }
       .directory-card {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr);
@@ -811,6 +913,7 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
 <p>Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL, save credentials, and follow instructions (any).</p>
           <div class="surface-switcher" role="tablist" aria-label="Deploy surfaces">
             <button class="surface-tab is-active" type="button" role="tab" aria-selected="true" data-surface-tab="install">install skill</button>
+            ${featuredTab}
             <button class="surface-tab" type="button" role="tab" aria-selected="false" data-surface-tab="directory">directory</button>
           </div>
           <section class="surface-panel is-active" data-surface-panel="install" role="tabpanel">
@@ -827,6 +930,7 @@ function renderLandingPage(config: ReturnType<typeof readDeployConfig>, origin: 
               <li><strong>3.</strong><span>Then the agent can start shopping through the right merchant MCP</span></li>
             </ol>
           </section>
+          ${featuredPanel}
           <section class="surface-panel" data-surface-panel="directory" role="tabpanel" hidden>
             <div class="directory-intro">
               <p class="prompt-title">All Lobster Categories</p>

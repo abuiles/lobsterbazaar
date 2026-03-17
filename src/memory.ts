@@ -2,6 +2,7 @@ import type {
   Claw,
   CountryArtifact,
   CountryMerchantSummary,
+  FeaturedMerchantSummary,
   MetricsSnapshot,
   Merchant,
   MerchantArtifact,
@@ -116,6 +117,28 @@ export class MemoryRepositories implements Repositories {
 
     return Array.from(this.merchants.values())
       .filter((merchant) => merchant.countryCodes.includes(normalized))
+      .map((merchant) => ({
+        slug: merchant.slug,
+        displayName: merchant.displayName,
+        storeUrl: merchant.storeUrl,
+        summary: buildPublicMerchantSummary({
+          locationsSummary: merchant.locationsSummary,
+          verticalMetadata: merchant.verticalMetadata
+        }),
+        description: buildPublicMerchantDescription({
+          notes: merchant.notes,
+          verticalMetadata: merchant.verticalMetadata
+        }),
+        activeOffersCount: activeCounts.get(merchant.slug) ?? 0
+      }))
+      .sort(compareCountryMerchants);
+  }
+
+  async listFeaturedMerchants(now: string): Promise<FeaturedMerchantSummary[]> {
+    const activeCounts = await this.listActiveOfferCounts(undefined, now);
+
+    return Array.from(this.merchants.values())
+      .filter((merchant) => merchant.verticalMetadata.featured === true)
       .map((merchant) => ({
         slug: merchant.slug,
         displayName: merchant.displayName,

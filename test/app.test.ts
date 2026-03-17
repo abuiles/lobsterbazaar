@@ -258,6 +258,17 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL, save credentials, and follow instructions (any).");
     expect(body).toContain("Read https://lobsterbrew.test/skill.md and follow the instructions to join Lobster Bazaar.");
     expect(body).toContain("Skill install instruction");
+    expect(body.indexOf('data-surface-tab="install">install skill')).toBeLessThan(
+      body.indexOf('data-surface-tab="featured">featured merchants')
+    );
+    expect(body.indexOf('data-surface-tab="featured">featured merchants')).toBeLessThan(
+      body.indexOf('data-surface-tab="directory">directory')
+    );
+    expect(body).toContain("Featured Merchants");
+    expect(body).toContain("Sample Roaster");
+    expect(body).toContain("Known for washed coffees and bright acidity.");
+    expect(body).toContain('href="https://sample-roaster.com"');
+    expect(body).toContain("sample-roaster.com");
     expect(body).toContain("Let the agent register once and save its key");
     expect(body).toContain("All Lobster Categories");
     expect(body).toContain("Lobster Bread");
@@ -268,6 +279,125 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("source code on GitHub");
     expect(body).toContain("powered by");
     expect(body).toContain('/assets/mascots/lobsterbazaar-default.jpg');
+  });
+
+  it("hides the featured merchants surface when no merchants are featured", async () => {
+    const { app, repositories } = await createTestHarness();
+
+    await repositories.putMerchant({
+      slug: "sample-roaster",
+      displayName: "Sample Roaster",
+      storeUrl: "https://sample-roaster.com",
+      storeDomain: "sample-roaster.myshopify.com",
+      storefrontMcpUrl: undefined,
+      countryCodes: ["US"],
+      locationsSummary: "20+",
+      notes: "Known for washed coffees and bright acidity.",
+      tags: ["coffee", "specialty"],
+      claimContact: "hello@sample-roaster.com",
+      claimStatus: "unclaimed",
+      verticalMetadata: {}
+    });
+
+    const response = await app.fetch(new Request("https://lobsterbrew.test/"));
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).not.toContain("featured merchants");
+    expect(body).not.toContain("Featured Merchants");
+  });
+
+  it("lists only featured merchants from repository data", async () => {
+    const repositories = new MemoryRepositories();
+
+    await repositories.putMerchant({
+      slug: "alpha-roaster",
+      displayName: "Alpha Roaster",
+      storeUrl: "https://alpha-roaster.com",
+      storeDomain: "alpha-roaster.myshopify.com",
+      storefrontMcpUrl: undefined,
+      countryCodes: ["US"],
+      locationsSummary: "2 cafes",
+      notes: "Alpha description",
+      tags: ["coffee"],
+      claimContact: undefined,
+      claimStatus: "claimed",
+      verticalMetadata: {
+        featured: true
+      }
+    });
+
+    await repositories.putMerchant({
+      slug: "beta-roaster",
+      displayName: "Beta Roaster",
+      storeUrl: "https://beta-roaster.com",
+      storeDomain: "beta-roaster.myshopify.com",
+      storefrontMcpUrl: undefined,
+      countryCodes: ["US"],
+      locationsSummary: "1 cafe",
+      notes: "Beta description",
+      tags: ["coffee"],
+      claimContact: undefined,
+      claimStatus: "claimed",
+      verticalMetadata: {
+        featured: true
+      }
+    });
+
+    await repositories.putMerchant({
+      slug: "gamma-roaster",
+      displayName: "Gamma Roaster",
+      storeUrl: "https://gamma-roaster.com",
+      storeDomain: "gamma-roaster.myshopify.com",
+      storefrontMcpUrl: undefined,
+      countryCodes: ["US"],
+      locationsSummary: "4 cafes",
+      notes: "Gamma description",
+      tags: ["coffee"],
+      claimContact: undefined,
+      claimStatus: "claimed",
+      verticalMetadata: {}
+    });
+
+    await repositories.putClaim({
+      claimId: "claim_alpha_roaster",
+      merchantSlug: "alpha-roaster",
+      status: "claimed",
+      contact: "alpha@example.com",
+      note: "Seed claim for alpha."
+    });
+
+    await repositories.putClaim({
+      claimId: "claim_beta_roaster",
+      merchantSlug: "beta-roaster",
+      status: "claimed",
+      contact: "beta@example.com",
+      note: "Seed claim for beta."
+    });
+
+    await repositories.putOffer({
+      offerId: "offer_alpha",
+      merchantSlug: "alpha-roaster",
+      title: "Alpha offer",
+      summary: "Alpha summary",
+      countryCodes: ["US"],
+      activeFrom: "2026-03-01T00:00:00Z",
+      validThrough: "2026-04-01T00:00:00Z",
+      offerType: "discount_code",
+      termsText: "Alpha terms",
+      priority: 10,
+      publicProofUrl: undefined,
+      offerCode: undefined,
+      status: "active",
+      verticalMetadata: {}
+    });
+
+    const featuredMerchants = await repositories.listFeaturedMerchants("2026-03-15T12:00:00Z");
+
+    expect(featuredMerchants.map((merchant) => merchant.slug)).toEqual([
+      "alpha-roaster",
+      "beta-roaster"
+    ]);
   });
 
   it("returns country offers as markdown", async () => {

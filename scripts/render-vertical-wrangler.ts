@@ -1,14 +1,23 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 interface DeployConfigFile {
   deploy_id: string;
   deploy_domain: string;
   brand_name: string;
+  vertical_name?: string;
   vertical_summary: string;
   skill_buying_targets?: string;
   emoji?: string;
   deploy_mascot_url?: string;
+}
+
+interface DirectoryVerticalEntry {
+  deployId: string;
+  brandName: string;
+  domain: string;
+  verticalName?: string;
+  emoji?: string;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -73,6 +82,67 @@ function parseJsonObject(text: string, label: string): JsonObject {
   }
 }
 
+function normalizeDirectoryDomain(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
+    return parsed.host;
+  } catch {
+    return trimmed.replace(/^[a-z]+:\/\//i, "").replace(/\/.*$/, "");
+  }
+}
+
+async function loadDirectoryVerticals(resolvedVerticalDir: string): Promise<DirectoryVerticalEntry[]> {
+  const verticalsRoot = path.dirname(resolvedVerticalDir);
+  const entries = await readdir(verticalsRoot, { withFileTypes: true });
+  const directoryVerticals: DirectoryVerticalEntry[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const deployConfigPath = path.join(verticalsRoot, entry.name, "deploy.config.json");
+    let deployConfigText = "";
+    try {
+      deployConfigText = await readFile(deployConfigPath, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+
+    const deployConfig = parseJsonObject(deployConfigText, deployConfigPath) as unknown as DeployConfigFile;
+    const domain = typeof deployConfig.deploy_domain === "string"
+      ? normalizeDirectoryDomain(deployConfig.deploy_domain)
+      : "";
+    const deployId = typeof deployConfig.deploy_id === "string" ? deployConfig.deploy_id.trim() : "";
+    const brandName = typeof deployConfig.brand_name === "string" ? deployConfig.brand_name.trim() : "";
+
+    if (!deployId || !brandName || !domain) {
+      continue;
+    }
+
+    directoryVerticals.push({
+      deployId,
+      brandName,
+      domain,
+      verticalName:
+        typeof deployConfig.vertical_name === "string" && deployConfig.vertical_name.trim()
+          ? deployConfig.vertical_name.trim()
+          : undefined,
+      emoji: typeof deployConfig.emoji === "string" && deployConfig.emoji.trim() ? deployConfig.emoji.trim() : undefined
+    });
+  }
+
+  return directoryVerticals.sort((left, right) => left.brandName.localeCompare(right.brandName));
+}
+
 async function main() {
   const verticalDir = process.argv[2];
   const outputPath = process.argv[3];
@@ -89,6 +159,7 @@ async function main() {
 
   const wranglerConfig = expandEnvPlaceholders(parseJsonObject(wranglerText, "wrangler.jsonc")) as JsonObject;
   const deployConfig = parseJsonObject(deployConfigText, "deploy.config.json") as unknown as DeployConfigFile;
+  const directoryVerticals = await loadDirectoryVerticals(resolvedVerticalDir);
 
   const vars: JsonObject = {
     ...(typeof wranglerConfig.vars === "object" && wranglerConfig.vars !== null && !Array.isArray(wranglerConfig.vars)
@@ -101,6 +172,7 @@ async function main() {
     DEPLOY_EMOJI:
       typeof deployConfig.emoji === "string" && deployConfig.emoji.trim() ? deployConfig.emoji.trim() : "🦞"
   };
+  vars.DIRECTORY_VERTICALS_JSON = JSON.stringify(directoryVerticals);
 
   if (typeof deployConfig.skill_buying_targets === "string" && deployConfig.skill_buying_targets.trim()) {
     vars.SKILL_BUYING_TARGETS = deployConfig.skill_buying_targets.trim();

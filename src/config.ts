@@ -1,4 +1,4 @@
-import type { DeployConfig } from "./domain";
+import type { DeployConfig, DirectoryVertical } from "./domain";
 
 export interface Env {
   DB: D1Database;
@@ -11,7 +11,93 @@ export interface Env {
   SKILL_BUYING_TARGETS?: string;
   DEPLOY_MASCOT_URL?: string;
   DEPLOY_EMOJI?: string;
+  DIRECTORY_VERTICALS_JSON?: string;
   OPERATOR_TOKEN?: string;
+}
+
+function normalizeDirectoryDomain(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
+    return parsed.host;
+  } catch {
+    return trimmed.replace(/^[a-z]+:\/\//i, "").replace(/\/.*$/, "");
+  }
+}
+
+function buildDirectoryUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed.includes("://") ? trimmed : `https://${trimmed}`;
+}
+
+function parseDirectoryVerticals(
+  raw: string | undefined,
+  fallback: Pick<DeployConfig, "brandName" | "deployId" | "deployDomain" | "emoji">
+): DirectoryVertical[] {
+  if (!raw?.trim()) {
+    const fallbackDomain = normalizeDirectoryDomain(fallback.deployDomain);
+    return fallbackDomain
+      ? [
+          {
+            deployId: fallback.deployId,
+            brandName: fallback.brandName,
+            domain: fallbackDomain,
+            url: buildDirectoryUrl(fallback.deployDomain),
+            emoji: fallback.emoji
+          }
+        ]
+      : [];
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("DIRECTORY_VERTICALS_JSON must be valid JSON");
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("DIRECTORY_VERTICALS_JSON must be a JSON array");
+  }
+
+  const directoryVerticals: DirectoryVertical[] = [];
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+
+    const deployId = typeof entry.deployId === "string" ? entry.deployId.trim() : "";
+    const brandName = typeof entry.brandName === "string" ? entry.brandName.trim() : "";
+    const deployDomain = typeof entry.domain === "string" ? entry.domain.trim() : "";
+    const verticalName = typeof entry.verticalName === "string" && entry.verticalName.trim()
+      ? entry.verticalName.trim()
+      : undefined;
+    const emoji = typeof entry.emoji === "string" && entry.emoji.trim() ? entry.emoji.trim() : undefined;
+    const domain = normalizeDirectoryDomain(deployDomain);
+
+    if (!deployId || !brandName || !domain) {
+      continue;
+    }
+
+    directoryVerticals.push({
+      deployId,
+      brandName,
+      domain,
+      url: buildDirectoryUrl(deployDomain),
+      verticalName,
+      emoji
+    });
+  }
+
+  return directoryVerticals;
 }
 
 export function readDeployConfig(env: Env): DeployConfig {
@@ -27,6 +113,13 @@ export function readDeployConfig(env: Env): DeployConfig {
     throw new Error("Missing required deploy configuration");
   }
 
+  const directoryVerticals = parseDirectoryVerticals(env.DIRECTORY_VERTICALS_JSON, {
+    brandName,
+    deployId,
+    deployDomain,
+    emoji
+  });
+
   return {
     brandName,
     deployId,
@@ -34,6 +127,7 @@ export function readDeployConfig(env: Env): DeployConfig {
     verticalSummary,
     skillBuyingTargets,
     mascotUrl,
-    emoji
+    emoji,
+    directoryVerticals
   };
 }

@@ -1,6 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "lobsterbrew",
+  // Shared placeholder config only.
+  // Real instance configs live under deploys/private/lobsterbrew/verticals/*/wrangler.jsonc
+  "name": "${LOBSTERBAZAAR_WORKER_NAME}",
   "main": "src/index.ts",
   "preview_urls": true,
   "compatibility_date": "2026-03-15",
@@ -16,14 +18,14 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "lobsterbazaar",
-      "database_id": "93768a85-e0e1-4082-bd39-04a3d8ad87be"
+      "database_name": "${LOBSTERBAZAAR_DB_NAME}",
+      "database_id": "${LOBSTERBAZAAR_DB_ID}"
     }
   ],
   "r2_buckets": [
     {
       "binding": "ARTIFACTS",
-      "bucket_name": "lobsterbazaar-artifacts"
+      "bucket_name": "${LOBSTERBAZAAR_ARTIFACTS_BUCKET}"
     }
   ]
 }

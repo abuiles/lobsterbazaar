@@ -164,6 +164,7 @@ export interface DeployConfig {
   brandName: string;
   deployId: string;
   deployDomain: string;
+  verticalId: string;
   verticalSummary: string;
   skillBuyingTargets?: string;
   mascotUrl: string;
@@ -186,4 +187,11 @@ export interface DeployPackage {
   merchants: Merchant[];
   claims: MerchantClaim[];
   offers: Offer[];
+}
+
+export interface MetricsSnapshot {
+  merchantCount: number;
+  activeOfferCount: number;
+  claimedMerchantCount: number;
+  countryCount: number;
 }

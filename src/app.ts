@@ -3,6 +3,7 @@ import { readDeployConfig, type Env } from "./config";
 import type { MerchantConnectPayload, RegisterClawInput } from "./domain";
 import { badRequest, notFound } from "./errors";
 import { errorResponse, html, isMethod, json, parseJson, text } from "./http";
+import { prepareRequestMetric, recordRequestMetric } from "./metrics";
 import { deriveStorefrontMcpUrl, normalizeCountryCode } from "./merchant";
 import { R2ArtifactStore } from "./r2";
 import { D1Repositories } from "./d1";
@@ -12,6 +13,7 @@ interface AppDependencies {
   artifacts: ArtifactStore;
   repositories: Repositories;
   config: ReturnType<typeof readDeployConfig>;
+  metrics?: AnalyticsEngineDataset;
   staticAssets?: Fetcher;
   operatorToken?: string;
   now: () => string;
@@ -20,21 +22,27 @@ interface AppDependencies {
 export function createApp(dependencies: AppDependencies) {
   return {
     fetch: async (request: Request): Promise<Response> => {
+      const startedAt = Date.now();
+      let response: Response | null = null;
+      let handledError: unknown;
+      let requestMetric: Awaited<ReturnType<typeof prepareRequestMetric>> = null;
+      let requestNormalizedPath = "/";
+
       try {
         const url = new URL(request.url);
         const pathname = url.pathname.replace(/\/+$/, "") || "/";
         const wantsMarkdown = pathname.endsWith(".md");
         const normalizedPath = wantsMarkdown ? pathname.slice(0, -3) : pathname;
+        requestNormalizedPath = normalizedPath;
+        requestMetric = await prepareRequestMetric(request, normalizedPath);
 
         if (pathname.startsWith("/assets/") && dependencies.staticAssets) {
           return dependencies.staticAssets.fetch(request);
         }
 
         if (normalizedPath === "/" && isMethod(request, "GET")) {
-          return html(renderLandingPage(dependencies.config, url.origin));
-        }
-
-        if (normalizedPath === "/skill" && isMethod(request, "GET")) {
+          response = html(renderLandingPage(dependencies.config, url.origin));
+        } else if (normalizedPath === "/skill" && isMethod(request, "GET")) {
           const skill = await ensureSkillArtifact(dependencies.artifacts, {
             brandName: dependencies.config.brandName,
             deployId: dependencies.config.deployId,
@@ -47,14 +55,12 @@ export function createApp(dependencies: AppDependencies) {
             merchantConnectPath: "/merchants/{slug}/connect"
           });
 
-          return text(skill, { headers: { "content-type": "text/markdown; charset=utf-8" } });
-        }
-
-        if (normalizedPath === "/claws/register" && isMethod(request, "POST")) {
+          response = text(skill, { headers: { "content-type": "text/markdown; charset=utf-8" } });
+        } else if (normalizedPath === "/claws/register" && isMethod(request, "POST")) {
           const payload = await parseRegisterRequest(request);
           const result = await dependencies.repositories.createClaw(payload, dependencies.config.deployId);
 
-          return json(
+          response = json(
             {
               claw: {
                 claw_id: result.claw.clawId,
@@ -66,11 +72,9 @@ export function createApp(dependencies: AppDependencies) {
             },
             { status: 201 }
           );
-        }
-
-        if (normalizedPath === "/countries" && isMethod(request, "GET")) {
+        } else if (normalizedPath === "/countries" && isMethod(request, "GET")) {
           const countryCodes = await dependencies.repositories.listCountryCodes();
-          return wantsMarkdown
+          response = wantsMarkdown
             ? text(
               renderCountriesIndexMarkdown(countryCodes),
               { headers: { "content-type": "text/markdown; charset=utf-8" } }
@@ -79,184 +83,217 @@ export function createApp(dependencies: AppDependencies) {
               generated_at: dependencies.now(),
               countries: countryCodes
             });
-        }
+        } else {
+          const countryMatch = normalizedPath.match(/^\/countries\/([A-Za-z]{2,3})$/);
+          if (countryMatch && isMethod(request, "GET")) {
+            const countryCode = normalizeCountryCode(countryMatch[1] ?? "");
+            if (!(await dependencies.repositories.supportsCountry(countryCode))) {
+              throw notFound("Country not found");
+            }
 
-        const countryMatch = normalizedPath.match(/^\/countries\/([A-Za-z]{2,3})$/);
-        if (countryMatch && isMethod(request, "GET")) {
-          const countryCode = normalizeCountryCode(countryMatch[1] ?? "");
-          if (!(await dependencies.repositories.supportsCountry(countryCode))) {
-            throw notFound("Country not found");
-          }
-
-          const artifact = await ensureCountryArtifact(
-            dependencies.artifacts,
-            dependencies.repositories,
-            countryCode,
-            dependencies.now()
-          );
-
-          if (wantsMarkdown) {
-            return text(renderCountryMarkdown(artifact, url.origin), {
-              headers: { "content-type": "text/markdown; charset=utf-8" }
-            });
-          }
-
-          return json({
-            country_code: artifact.countryCode,
-            generated_at: artifact.generatedAt,
-            merchants: artifact.merchants.map((merchant) => ({
-              slug: merchant.slug,
-              display_name: merchant.displayName,
-              store_url: merchant.storeUrl,
-              summary: merchant.summary,
-              description: merchant.description,
-              active_offers_count: merchant.activeOffersCount
-            }))
-          });
-        }
-
-        const offersMatch = normalizedPath.match(/^\/offers\/([A-Za-z]{2,3})$/);
-        if (offersMatch && isMethod(request, "GET")) {
-          const countryCode = normalizeCountryCode(offersMatch[1] ?? "");
-          if (!(await dependencies.repositories.supportsCountry(countryCode))) {
-            throw notFound("Country not found");
-          }
-
-          const artifact = await ensureOffersArtifact(
-            dependencies.artifacts,
-            dependencies.repositories,
-            countryCode,
-            dependencies.now()
-          );
-
-          if (wantsMarkdown) {
-            return text(renderOffersMarkdown(artifact.offers, countryCode), {
-              headers: { "content-type": "text/markdown; charset=utf-8" }
-            });
-          }
-
-          return json({
-            country_code: artifact.countryCode,
-            generated_at: artifact.generatedAt,
-            offers: artifact.offers.map((offer) => ({
-              offer_id: offer.offerId,
-              merchant_slug: offer.merchantSlug,
-              merchant_display_name: offer.merchantDisplayName,
-              title: offer.title,
-              summary: offer.summary,
-              offer_type: offer.offerType,
-              valid_through: offer.validThrough,
-              terms_text: offer.termsText
-            }))
-          });
-        }
-
-        const merchantMatch = normalizedPath.match(/^\/merchants\/([^/]+)\/connect$/);
-        if (merchantMatch && isMethod(request, "GET")) {
-          const slug = merchantMatch[1] ?? "";
-          const artifact = await ensureMerchantArtifact(
-            dependencies.artifacts,
-            dependencies.repositories,
-            slug,
-            dependencies.now()
-          );
-
-          if (!artifact) {
-            throw notFound("Merchant not found");
-          }
-
-          const payload: MerchantConnectPayload = {
-            merchant: {
-              name: artifact.displayName,
-              slug: artifact.slug,
-              connectPath: `/merchants/${artifact.slug}/connect`,
-              storeUrl: artifact.storeUrl
-            },
-            mcp: {
-              url: artifact.storefrontMcpUrl
-            },
-            offers: await dependencies.repositories.listActiveOffersForMerchant(
-              artifact.slug,
+            const artifact = await ensureCountryArtifact(
+              dependencies.artifacts,
+              dependencies.repositories,
+              countryCode,
               dependencies.now()
-            ),
-            cartAttributes: [
-              {
-                key: "lb_source__",
-                value: dependencies.config.deployId
+            );
+
+            response = wantsMarkdown
+              ? text(renderCountryMarkdown(artifact, url.origin), {
+                headers: { "content-type": "text/markdown; charset=utf-8" }
+              })
+              : json({
+                country_code: artifact.countryCode,
+                generated_at: artifact.generatedAt,
+                merchants: artifact.merchants.map((merchant) => ({
+                  slug: merchant.slug,
+                  display_name: merchant.displayName,
+                  store_url: merchant.storeUrl,
+                  summary: merchant.summary,
+                  description: merchant.description,
+                  active_offers_count: merchant.activeOffersCount
+                }))
+              });
+          } else {
+            const offersMatch = normalizedPath.match(/^\/offers\/([A-Za-z]{2,3})$/);
+            if (offersMatch && isMethod(request, "GET")) {
+              const countryCode = normalizeCountryCode(offersMatch[1] ?? "");
+              if (!(await dependencies.repositories.supportsCountry(countryCode))) {
+                throw notFound("Country not found");
               }
-            ]
-          };
 
-          if (wantsMarkdown) {
-            return text(renderMerchantConnectMarkdown(payload), {
-              headers: { "content-type": "text/markdown; charset=utf-8" }
-            });
+              const artifact = await ensureOffersArtifact(
+                dependencies.artifacts,
+                dependencies.repositories,
+                countryCode,
+                dependencies.now()
+              );
+
+              response = wantsMarkdown
+                ? text(renderOffersMarkdown(artifact.offers, countryCode), {
+                  headers: { "content-type": "text/markdown; charset=utf-8" }
+                })
+                : json({
+                  country_code: artifact.countryCode,
+                  generated_at: artifact.generatedAt,
+                  offers: artifact.offers.map((offer) => ({
+                    offer_id: offer.offerId,
+                    merchant_slug: offer.merchantSlug,
+                    merchant_display_name: offer.merchantDisplayName,
+                    title: offer.title,
+                    summary: offer.summary,
+                    offer_type: offer.offerType,
+                    valid_through: offer.validThrough,
+                    terms_text: offer.termsText
+                  }))
+                });
+            } else {
+              const merchantMatch = normalizedPath.match(/^\/merchants\/([^/]+)\/connect$/);
+              if (merchantMatch && isMethod(request, "GET")) {
+                const slug = merchantMatch[1] ?? "";
+                const artifact = await ensureMerchantArtifact(
+                  dependencies.artifacts,
+                  dependencies.repositories,
+                  slug,
+                  dependencies.now()
+                );
+
+                if (!artifact) {
+                  throw notFound("Merchant not found");
+                }
+
+                const payload: MerchantConnectPayload = {
+                  merchant: {
+                    name: artifact.displayName,
+                    slug: artifact.slug,
+                    connectPath: `/merchants/${artifact.slug}/connect`,
+                    storeUrl: artifact.storeUrl
+                  },
+                  mcp: {
+                    url: artifact.storefrontMcpUrl
+                  },
+                  offers: await dependencies.repositories.listActiveOffersForMerchant(
+                    artifact.slug,
+                    dependencies.now()
+                  ),
+                  cartAttributes: [
+                    {
+                      key: "lb_source__",
+                      value: dependencies.config.deployId
+                    }
+                  ]
+                };
+
+                response = wantsMarkdown
+                  ? text(renderMerchantConnectMarkdown(payload), {
+                    headers: { "content-type": "text/markdown; charset=utf-8" }
+                  })
+                  : json({
+                    merchant: {
+                      name: payload.merchant.name,
+                      connect_path: payload.merchant.connectPath,
+                      store_url: payload.merchant.storeUrl
+                    },
+                    mcp: payload.mcp,
+                    offers: payload.offers.map((offer) => ({
+                      offer_id: offer.offerId,
+                      title: offer.title,
+                      summary: offer.summary,
+                      offer_type: offer.offerType,
+                      valid_through: offer.validThrough,
+                      terms_text: offer.termsText
+                    })),
+                    cart_attributes: payload.cartAttributes.map((attribute) => ({
+                      key: attribute.key,
+                      value: attribute.value
+                    }))
+                  });
+              } else if (normalizedPath === "/internal/materialize" && isMethod(request, "POST")) {
+                const header = request.headers.get("authorization");
+                const operatorToken = header?.replace(/^Bearer\s+/i, "");
+
+                if (!dependencies.operatorToken || !operatorToken) {
+                  throw notFound("Route not found");
+                }
+
+                if (operatorToken !== dependencies.operatorToken) {
+                  throw notFound("Route not found");
+                }
+
+                const sinceRaw = url.searchParams.get("since");
+                const since = parseSince(sinceRaw);
+
+                await materializePublicArtifacts(
+                  dependencies.artifacts,
+                  dependencies.repositories,
+                  dependencies.now(),
+                  {
+                    brandName: dependencies.config.brandName,
+                    deployId: dependencies.config.deployId,
+                    deployDomain: dependencies.config.deployDomain,
+                    verticalSummary: dependencies.config.verticalSummary,
+                    skillBuyingTargets: dependencies.config.skillBuyingTargets,
+                    registerPath: "/claws/register",
+                    countriesPath: "/countries",
+                    offersPath: "/offers",
+                    merchantConnectPath: "/merchants/{slug}/connect"
+                  },
+                  { since }
+                );
+
+                response = json({ ok: true });
+              } else {
+                throw notFound("Route not found");
+              }
+            }
           }
-
-          return json({
-            merchant: {
-              name: payload.merchant.name,
-              connect_path: payload.merchant.connectPath,
-              store_url: payload.merchant.storeUrl
-            },
-            mcp: payload.mcp,
-            offers: payload.offers.map((offer) => ({
-              offer_id: offer.offerId,
-              title: offer.title,
-              summary: offer.summary,
-              offer_type: offer.offerType,
-              valid_through: offer.validThrough,
-              terms_text: offer.termsText
-            })),
-            cart_attributes: payload.cartAttributes.map((attribute) => ({
-              key: attribute.key,
-              value: attribute.value
-            }))
-          });
         }
-
-        if (normalizedPath === "/internal/materialize" && isMethod(request, "POST")) {
-          const header = request.headers.get("authorization");
-          const operatorToken = header?.replace(/^Bearer\s+/i, "");
-
-          if (!dependencies.operatorToken || !operatorToken) {
-            throw notFound("Route not found");
-          }
-
-          if (operatorToken !== dependencies.operatorToken) {
-            throw notFound("Route not found");
-          }
-
-          const sinceRaw = url.searchParams.get("since");
-          const since = parseSince(sinceRaw);
-
-          await materializePublicArtifacts(
-            dependencies.artifacts,
-            dependencies.repositories,
-            dependencies.now(),
-            {
-              brandName: dependencies.config.brandName,
-              deployId: dependencies.config.deployId,
-              deployDomain: dependencies.config.deployDomain,
-              verticalSummary: dependencies.config.verticalSummary,
-              skillBuyingTargets: dependencies.config.skillBuyingTargets,
-              registerPath: "/claws/register",
-              countriesPath: "/countries",
-              offersPath: "/offers",
-              merchantConnectPath: "/merchants/{slug}/connect"
-            },
-            { since }
-          );
-
-          return json({ ok: true });
-        }
-
-        throw notFound("Route not found");
       } catch (error) {
-        return errorResponse(error);
+        handledError = error;
+        response = errorResponse(error);
       }
+
+      await recordRequestMetricSafely(dependencies, {
+        requestNormalizedPath,
+        requestMetric,
+        response,
+        durationMs: Date.now() - startedAt,
+        handledError
+      });
+
+      return response;
     }
   };
+}
+
+async function recordRequestMetricSafely(
+  dependencies: Pick<AppDependencies, "metrics" | "config" | "repositories" | "now">,
+  input: {
+    requestNormalizedPath: string;
+    requestMetric: Awaited<ReturnType<typeof prepareRequestMetric>>;
+    response: Response;
+    durationMs: number;
+    handledError: unknown;
+  }
+): Promise<void> {
+  try {
+    const snapshot =
+      input.requestNormalizedPath === "/internal/materialize" && input.response.ok
+        ? await dependencies.repositories.getMetricsSnapshot(dependencies.now())
+        : undefined;
+
+    recordRequestMetric({
+      dataset: dependencies.metrics,
+      config: dependencies.config,
+      metric: input.requestMetric,
+      response: input.response,
+      durationMs: input.durationMs,
+      error: input.handledError,
+      snapshot
+    });
+  } catch (error) {
+    console.warn("Failed to record analytics metric", error);
+  }
 }
 
 function renderCountriesIndexMarkdown(countryCodes: string[]): string {
@@ -928,6 +965,7 @@ export function createProductionApp(env: Env) {
     artifacts: new R2ArtifactStore(env.ARTIFACTS),
     repositories: new D1Repositories(env.DB),
     config: readDeployConfig(env),
+    metrics: env.METRICS,
     staticAssets: env.ASSETS,
     operatorToken: env.OPERATOR_TOKEN,
     now: () => new Date().toISOString()

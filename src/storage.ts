@@ -2,6 +2,7 @@ import type {
   Claw,
   CountryArtifact,
   CountryMerchantSummary,
+  MetricsSnapshot,
   Merchant,
   MerchantArtifact,
   MerchantClaim,
@@ -52,6 +53,7 @@ export interface Repositories {
   listClaimIds(): Promise<string[]>;
   listOfferMerchantSlugsForAddedSince(since: string): Promise<string[]>;
   listOfferCountryCodesForAddedSince(since: string): Promise<string[]>;
+  getMetricsSnapshot(now: string): Promise<MetricsSnapshot>;
   putMerchant(input: CreateMerchantInput): Promise<void>;
   putOffer(input: CreateOfferInput): Promise<void>;
   putClaim(input: CreateClaimInput): Promise<void>;

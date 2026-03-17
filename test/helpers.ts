@@ -4,11 +4,22 @@ import { MemoryArtifactStore, MemoryRepositories } from "../src/memory";
 interface TestHarnessOptions {
   includeClaimAccess?: boolean;
   includeSeedOffers?: boolean;
+  metricsDataset?: AnalyticsEngineDataset;
+  repositories?: MemoryRepositories;
+}
+
+export class RecordingMetricsDataset {
+  readonly writes: AnalyticsEngineDataPoint[] = [];
+
+  writeDataPoint(data: AnalyticsEngineDataPoint): void {
+    this.writes.push(data);
+  }
 }
 
 export async function createTestHarness(options: TestHarnessOptions = {}) {
   const artifacts = new MemoryArtifactStore();
-  const repositories = new MemoryRepositories();
+  const repositories = options.repositories ?? new MemoryRepositories();
+  const metrics = options.metricsDataset ?? new RecordingMetricsDataset();
   const includeClaimAccess = options.includeClaimAccess ?? true;
   const includeSeedOffers = options.includeSeedOffers ?? true;
 
@@ -95,6 +106,7 @@ export async function createTestHarness(options: TestHarnessOptions = {}) {
       brandName: "Lobster Bazaar",
       deployId: "lobsterbrew",
       deployDomain: "lobsterbrew.test",
+      verticalId: "coffee",
       verticalSummary: "Coffee-oriented merchant discovery for lobsters.",
       skillBuyingTargets: "coffee, subscriptions, and brewing gear",
       mascotUrl: "/assets/mascots/lobsterbazaar-default.jpg",
@@ -126,11 +138,12 @@ export async function createTestHarness(options: TestHarnessOptions = {}) {
         }
       ]
     },
+    metrics: metrics as unknown as AnalyticsEngineDataset,
     operatorToken: "test-operator-token",
     now: () => "2026-03-15T12:00:00Z"
   });
 
-  return { app, artifacts, repositories };
+  return { app, artifacts, repositories, metrics };
 }
 
 export async function requestJson<T>(app: ReturnType<typeof createApp>, input: string, init?: RequestInit) {

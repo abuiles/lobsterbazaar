@@ -2,6 +2,7 @@ import type {
   Claw,
   CountryArtifact,
   CountryMerchantSummary,
+  MetricsSnapshot,
   Merchant,
   MerchantArtifact,
   MerchantClaim,
@@ -246,6 +247,17 @@ export class MemoryRepositories implements Repositories {
       .flatMap((offer) => offer.countryCodes);
 
     return Array.from(new Set(countryCodes)).sort();
+  }
+
+  async getMetricsSnapshot(now: string): Promise<MetricsSnapshot> {
+    const merchants = Array.from(this.merchants.values());
+
+    return {
+      merchantCount: merchants.length,
+      activeOfferCount: Array.from(this.offers.values()).filter((offer) => isOfferActive(offer, now)).length,
+      claimedMerchantCount: merchants.filter((merchant) => merchant.claimStatus === "claimed").length,
+      countryCount: new Set(merchants.flatMap((merchant) => merchant.countryCodes)).size
+    };
   }
 
   async putMerchant(input: CreateMerchantInput): Promise<void> {

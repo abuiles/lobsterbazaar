@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { createTestHarness, requestJson, requestText } from "./helpers";
+import { createTestHarness, requestJson, requestText, RecordingMetricsDataset } from "./helpers";
+import { MemoryRepositories } from "../src/memory";
 
 interface RegisterResponse {
   claw: {
@@ -76,9 +77,15 @@ interface MerchantConnectResponse {
   }>;
 }
 
+function lastMetricWrite(metrics: { writes: AnalyticsEngineDataPoint[] }): AnalyticsEngineDataPoint {
+  const metric = metrics.writes.at(-1);
+  expect(metric).toBeDefined();
+  return metric as AnalyticsEngineDataPoint;
+}
+
 describe("lobsterbazaar worker", () => {
   it("registers buyer claws and returns a one-time api key", async () => {
-    const { app, repositories } = await createTestHarness();
+    const { app, repositories, metrics } = await createTestHarness();
 
     const { response, body } = await requestJson<RegisterResponse>(app, "/claws/register", {
       method: "POST",
@@ -100,6 +107,18 @@ describe("lobsterbazaar worker", () => {
     const claws = await repositories.listClaws();
     expect(claws).toHaveLength(1);
     expect(claws[0]?.apiKeyHash).not.toBe(body.claw.api_key);
+    expect(lastMetricWrite(metrics as RecordingMetricsDataset).blobs).toEqual([
+      "claw_register_success",
+      "lobsterbrew",
+      "coffee",
+      "/claws/register",
+      "POST",
+      "ok",
+      "2xx",
+      "buyer",
+      "",
+      ""
+    ]);
   });
 
   it("rejects merchant claw registration for unclaimed merchants", async () => {
@@ -280,7 +299,7 @@ describe("lobsterbazaar worker", () => {
   });
 
   it("returns 404 and skips artifact creation for unsupported countries", async () => {
-    const { app, artifacts } = await createTestHarness();
+    const { app, artifacts, metrics } = await createTestHarness();
 
     const unsupportedCountryResponse = await requestJson<ErrorResponse>(app, "/countries/ZZ");
     const unsupportedOffersResponse = await requestJson<ErrorResponse>(app, "/offers/ZZ");
@@ -289,10 +308,22 @@ describe("lobsterbazaar worker", () => {
     expect(unsupportedOffersResponse.response.status).toBe(404);
     expect(await artifacts.getCountry("ZZ")).toBeNull();
     expect(await artifacts.getOffers("ZZ")).toBeNull();
+    expect(lastMetricWrite(metrics as RecordingMetricsDataset).blobs).toEqual([
+      "offers_view",
+      "lobsterbrew",
+      "coffee",
+      "/offers/:country_code",
+      "GET",
+      "not_found",
+      "4xx",
+      "",
+      "",
+      "ZZ"
+    ]);
   });
 
   it("returns merchant MCP connect payload with lb_source__", async () => {
-    const { app } = await createTestHarness();
+    const { app, metrics } = await createTestHarness();
 
     const { response, body } = await requestJson<MerchantConnectResponse>(
       app,
@@ -310,6 +341,18 @@ describe("lobsterbazaar worker", () => {
         key: "lb_source__",
         value: "lobsterbrew"
       }
+    ]);
+    expect(lastMetricWrite(metrics as RecordingMetricsDataset).blobs).toEqual([
+      "merchant_connect_view",
+      "lobsterbrew",
+      "coffee",
+      "/merchants/:slug/connect",
+      "GET",
+      "ok",
+      "2xx",
+      "",
+      "claimed-roaster",
+      ""
     ]);
   });
 
@@ -332,7 +375,7 @@ describe("lobsterbazaar worker", () => {
   });
 
   it("renders the generated skill markdown", async () => {
-    const { app } = await createTestHarness();
+    const { app, metrics } = await createTestHarness();
 
     const response = await app.fetch(new Request("https://lobsterbrew.test/skill.md"));
     const body = await response.text();
@@ -359,6 +402,19 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("Highlight subscription savings");
     expect(body).toContain("resolution_path = storefront_graphql_fallback");
     expect(body).toContain("lb_source__ = lobsterbrew");
+    expect(lastMetricWrite(metrics as RecordingMetricsDataset).blobs).toEqual([
+      "skill_view",
+      "lobsterbrew",
+      "coffee",
+      "/skill",
+      "GET",
+      "ok",
+      "2xx",
+      "",
+      "",
+      ""
+    ]);
+    expect(lastMetricWrite(metrics as RecordingMetricsDataset).indexes).toEqual(["coffee"]);
   });
 
   it("rematerializes cached country and offers artifacts with fresh repository data", async () => {
@@ -542,5 +598,79 @@ describe("lobsterbazaar worker", () => {
     const body = (await response.json()) as { error: { code: string; message: string } };
     expect(body.error.message).toContain("`since` must be an ISO timestamp");
     expect(body.error.code).toBe("bad_request");
+  });
+
+  it("records snapshot counts for successful materialize runs", async () => {
+    const { app, metrics } = await createTestHarness();
+
+    const response = await app.fetch(
+      new Request("https://lobsterbrew.test/internal/materialize", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-operator-token"
+        }
+      })
+    );
+
+    expect(response.status).toBe(200);
+    const metric = lastMetricWrite(metrics as RecordingMetricsDataset);
+    expect(metric.blobs).toEqual([
+      "materialize_success",
+      "lobsterbrew",
+      "coffee",
+      "/internal/materialize",
+      "POST",
+      "ok",
+      "2xx",
+      "",
+      "",
+      ""
+    ]);
+    const doubles = metric.doubles ?? [];
+    expect(doubles.slice(3)).toEqual([2, 1, 1, 2]);
+  });
+
+  it("does not fail successful requests when the metrics binding throws", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const failingMetrics = {
+      writeDataPoint(): void {
+        throw new Error("metrics unavailable");
+      }
+    } as unknown as AnalyticsEngineDataset;
+    const { app } = await createTestHarness({ metricsDataset: failingMetrics });
+
+    const response = await app.fetch(new Request("https://lobsterbrew.test/skill.md"));
+
+    expect(response.status).toBe(200);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("does not fail materialize when the metrics snapshot lookup throws", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    class ThrowingSnapshotRepositories extends MemoryRepositories {
+      override async getMetricsSnapshot(): Promise<never> {
+        throw new Error("snapshot unavailable");
+      }
+    }
+
+    const repositories = new ThrowingSnapshotRepositories();
+    const { app } = await createTestHarness({
+      repositories,
+      metricsDataset: new RecordingMetricsDataset() as unknown as AnalyticsEngineDataset
+    });
+
+    const response = await app.fetch(
+      new Request("https://lobsterbrew.test/internal/materialize", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-operator-token"
+        }
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

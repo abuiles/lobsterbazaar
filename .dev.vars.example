@@ -1,5 +1,6 @@
 OPERATOR_TOKEN=replace-me
 DEPLOY_ID=lobsterbazaar
+VERTICAL_ID=coffee
 BRAND_NAME=Lobster Bazaar
 DEPLOY_DOMAIN=localhost:8787
 VERTICAL_SUMMARY=An agent-facing coffee buying service for Shopify coffee merchants. Use it to discover roasters, compare offers, connect to each merchant's Shopify Storefront MCP, build carts, and return a checkout link for the owner to complete payment.

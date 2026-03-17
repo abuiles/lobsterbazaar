@@ -4,6 +4,7 @@ import path from "node:path";
 interface DeployConfigFile {
   deploy_id: string;
   deploy_domain: string;
+  vertical_id: string;
   brand_name: string;
   vertical_name?: string;
   vertical_summary: string;
@@ -166,6 +167,7 @@ async function main() {
       ? (wranglerConfig.vars as JsonObject)
       : {}),
     DEPLOY_ID: assertString(deployConfig.deploy_id, "deploy_id"),
+    VERTICAL_ID: assertString(deployConfig.vertical_id, "vertical_id"),
     BRAND_NAME: assertString(deployConfig.brand_name, "brand_name"),
     DEPLOY_DOMAIN: assertString(deployConfig.deploy_domain, "deploy_domain"),
     VERTICAL_SUMMARY: assertString(deployConfig.vertical_summary, "vertical_summary"),

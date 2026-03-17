@@ -8,6 +8,7 @@ Rules:
 - Put real deploy packages under `deploys/private/<deploy-id>/`.
 - Do not store operator secrets in deploy packages.
 - Treat these files as private operator data even if they only contain merchant metadata.
+- Keep the Workers Analytics Engine binding present in each real deploy `wrangler.jsonc` so all verticals write to the shared `lobsterbazaar_metrics` dataset.
 
 Typical contents:
 

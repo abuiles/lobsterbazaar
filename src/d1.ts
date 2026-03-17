@@ -2,6 +2,7 @@ import { hashSecret } from "./crypto";
 import type {
   Claw,
   CountryMerchantSummary,
+  MetricsSnapshot,
   Merchant,
   MerchantArtifact,
   MerchantClaim,
@@ -430,6 +431,31 @@ export class D1Repositories implements Repositories {
       .all<{ claim_id: string }>();
 
     return (result.results ?? []).map((row) => row.claim_id);
+  }
+
+  async getMetricsSnapshot(now: string): Promise<MetricsSnapshot> {
+    const [merchantCountRow, activeOfferCountRow, claimedMerchantCountRow, countryCountRow] = await Promise.all([
+      this.db.prepare(`SELECT COUNT(*) AS total FROM merchants`).first<{ total: number | string }>(),
+      this.db
+        .prepare(
+          `SELECT COUNT(*) AS total
+           FROM offers
+           WHERE status = 'active'
+             AND (active_from IS NULL OR active_from <= ?1)
+             AND valid_through >= ?1`
+        )
+        .bind(now)
+        .first<{ total: number | string }>(),
+      this.db.prepare(`SELECT COUNT(*) AS total FROM merchants WHERE claim_status = 'claimed'`).first<{ total: number | string }>(),
+      this.db.prepare(`SELECT COUNT(DISTINCT country_code) AS total FROM merchant_countries`).first<{ total: number | string }>()
+    ]);
+
+    return {
+      merchantCount: Number(merchantCountRow?.total ?? 0),
+      activeOfferCount: Number(activeOfferCountRow?.total ?? 0),
+      claimedMerchantCount: Number(claimedMerchantCountRow?.total ?? 0),
+      countryCount: Number(countryCountRow?.total ?? 0)
+    };
   }
 
   async putMerchant(input: CreateMerchantInput): Promise<void> {

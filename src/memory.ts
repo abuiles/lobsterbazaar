@@ -15,7 +15,14 @@ import type {
 import { hashSecret } from "./crypto";
 import { conflict, notFound } from "./errors";
 import { createApiKey, createId } from "./ids";
-import { buildPublicMerchantSummary, compareCountryMerchants, deriveStorefrontMcpUrl, isOfferActive, normalizeCountryCode } from "./merchant";
+import {
+  buildPublicMerchantDescription,
+  buildPublicMerchantSummary,
+  compareCountryMerchants,
+  deriveStorefrontMcpUrl,
+  isOfferActive,
+  normalizeCountryCode
+} from "./merchant";
 import type { ArtifactStore, CreateClaimInput, CreateMerchantInput, CreateOfferInput, Repositories } from "./storage";
 
 export class MemoryArtifactStore implements ArtifactStore {
@@ -117,7 +124,10 @@ export class MemoryRepositories implements Repositories {
           locationsSummary: merchant.locationsSummary,
           verticalMetadata: merchant.verticalMetadata
         }),
-        description: merchant.notes,
+        description: buildPublicMerchantDescription({
+          notes: merchant.notes,
+          verticalMetadata: merchant.verticalMetadata
+        }),
         activeOffersCount: activeCounts.get(merchant.slug) ?? 0
       }))
       .sort(compareCountryMerchants);

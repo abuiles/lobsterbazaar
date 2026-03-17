@@ -42,6 +42,21 @@ export function buildPublicMerchantSummary(input: {
   return parts.join(" · ");
 }
 
+export function buildPublicMerchantDescription(input: {
+  notes?: string;
+  verticalMetadata?: Record<string, unknown>;
+}): string {
+  const verticalMetadata = input.verticalMetadata ?? {};
+  const shopDescription = typeof verticalMetadata.shop_description === "string"
+    ? verticalMetadata.shop_description.trim()
+    : "";
+  if (shopDescription) {
+    return shopDescription;
+  }
+
+  return input.notes?.trim() ?? "";
+}
+
 export function compareCountryMerchants(
   left: { activeOffersCount: number; displayName: string; slug: string },
   right: { activeOffersCount: number; displayName: string; slug: string }

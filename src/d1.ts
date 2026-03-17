@@ -12,7 +12,13 @@ import type {
 } from "./domain";
 import { conflict, notFound } from "./errors";
 import { createApiKey, createId } from "./ids";
-import { buildPublicMerchantSummary, compareCountryMerchants, deriveStorefrontMcpUrl, normalizeCountryCode } from "./merchant";
+import {
+  buildPublicMerchantDescription,
+  buildPublicMerchantSummary,
+  compareCountryMerchants,
+  deriveStorefrontMcpUrl,
+  normalizeCountryCode
+} from "./merchant";
 import type { CreateClaimInput, CreateMerchantInput, CreateOfferInput, Repositories } from "./storage";
 
 interface MerchantRow {
@@ -213,17 +219,24 @@ export class D1Repositories implements Repositories {
       }>();
 
     return (result.results ?? [])
-      .map((row) => ({
-        slug: row.slug,
-        displayName: row.display_name,
-        storeUrl: row.store_url,
-        summary: buildPublicMerchantSummary({
-          locationsSummary: row.locations_summary ?? undefined,
-          verticalMetadata: JSON.parse(row.vertical_metadata_json || "{}") as Record<string, unknown>
-        }),
-        description: row.notes,
-        activeOffersCount: Number(row.active_offers_count ?? 0)
-      }))
+      .map((row) => {
+        const verticalMetadata = JSON.parse(row.vertical_metadata_json || "{}") as Record<string, unknown>;
+
+        return {
+          slug: row.slug,
+          displayName: row.display_name,
+          storeUrl: row.store_url,
+          summary: buildPublicMerchantSummary({
+            locationsSummary: row.locations_summary ?? undefined,
+            verticalMetadata
+          }),
+          description: buildPublicMerchantDescription({
+            notes: row.notes,
+            verticalMetadata
+          }),
+          activeOffersCount: Number(row.active_offers_count ?? 0)
+        };
+      })
       .sort(compareCountryMerchants);
   }
 

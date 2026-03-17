@@ -37,6 +37,7 @@ The Worker currently provides:
 - `GET /offers/{country_code}`
 - `GET /merchants/{slug}/connect`
 - `POST /internal/materialize`
+- `POST /internal/metrics/materialize`
 
 `D1` is the control plane. `R2` is the public artifact plane.
 
@@ -177,6 +178,13 @@ To process only records added after a timestamp:
 
 ```bash
 curl -X POST "http://127.0.0.1:8787/internal/materialize?since=2026-03-15T00:00:00Z" \
+  -H "Authorization: Bearer replace-me"
+```
+
+If operators materialize artifacts outside the Worker, update the Analytics Engine snapshot without rematerializing:
+
+```bash
+curl -X POST http://127.0.0.1:8787/internal/metrics/materialize \
   -H "Authorization: Bearer replace-me"
 ```
 

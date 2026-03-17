@@ -19,6 +19,15 @@ interface AppDependencies {
   now: () => string;
 }
 
+function requireOperatorAccess(request: Request, operatorToken?: string): void {
+  const header = request.headers.get("authorization");
+  const providedToken = header?.replace(/^Bearer\s+/i, "");
+
+  if (!operatorToken || !providedToken || providedToken !== operatorToken) {
+    throw notFound("Route not found");
+  }
+}
+
 export function createApp(dependencies: AppDependencies) {
   return {
     fetch: async (request: Request): Promise<Response> => {
@@ -209,16 +218,7 @@ export function createApp(dependencies: AppDependencies) {
                     }))
                   });
               } else if (normalizedPath === "/internal/materialize" && isMethod(request, "POST")) {
-                const header = request.headers.get("authorization");
-                const operatorToken = header?.replace(/^Bearer\s+/i, "");
-
-                if (!dependencies.operatorToken || !operatorToken) {
-                  throw notFound("Route not found");
-                }
-
-                if (operatorToken !== dependencies.operatorToken) {
-                  throw notFound("Route not found");
-                }
+                requireOperatorAccess(request, dependencies.operatorToken);
 
                 const sinceRaw = url.searchParams.get("since");
                 const since = parseSince(sinceRaw);
@@ -241,6 +241,9 @@ export function createApp(dependencies: AppDependencies) {
                   { since }
                 );
 
+                response = json({ ok: true });
+              } else if (normalizedPath === "/internal/metrics/materialize" && isMethod(request, "POST")) {
+                requireOperatorAccess(request, dependencies.operatorToken);
                 response = json({ ok: true });
               } else {
                 throw notFound("Route not found");
@@ -278,7 +281,9 @@ async function recordRequestMetricSafely(
 ): Promise<void> {
   try {
     const snapshot =
-      input.requestNormalizedPath === "/internal/materialize" && input.response.ok
+      (input.requestNormalizedPath === "/internal/materialize"
+        || input.requestNormalizedPath === "/internal/metrics/materialize")
+      && input.response.ok
         ? await dependencies.repositories.getMetricsSnapshot(dependencies.now())
         : undefined;
 

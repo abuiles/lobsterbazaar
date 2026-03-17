@@ -4,6 +4,7 @@ import { normalizeCountryCode } from "./merchant";
 const COUNTRIES_ROUTE_PATTERN = /^\/countries\/([A-Za-z]{2,3})$/;
 const OFFERS_ROUTE_PATTERN = /^\/offers\/([A-Za-z]{2,3})$/;
 const MERCHANT_CONNECT_ROUTE_PATTERN = /^\/merchants\/([^/]+)\/connect$/;
+const MATERIALIZE_ROUTE_IDS = new Set(["/internal/materialize", "/internal/metrics/materialize"]);
 
 type TrackedEventName =
   | "landing_view"
@@ -80,7 +81,7 @@ function resolveEventName(routeMetric: PreparedRequestMetric, response: Response
     return response.status < 400 ? "claw_register_success" : "claw_register_failure";
   }
 
-  if (routeMetric.routeId === "/internal/materialize") {
+  if (MATERIALIZE_ROUTE_IDS.has(routeMetric.routeId)) {
     return response.status < 400 ? "materialize_success" : "materialize_failure";
   }
 
@@ -179,6 +180,14 @@ export async function prepareRequestMetric(request: Request, normalizedPath: str
     return {
       eventName: "landing_view",
       routeId: "/internal/materialize",
+      method
+    };
+  }
+
+  if (normalizedPath === "/internal/metrics/materialize") {
+    return {
+      eventName: "landing_view",
+      routeId: "/internal/metrics/materialize",
       method
     };
   }

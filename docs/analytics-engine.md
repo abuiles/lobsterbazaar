@@ -42,6 +42,11 @@ The dataset is shared across verticals. Sampling is keyed by `vertical_id` when 
 - `materialize_success`
 - `materialize_failure`
 
+`materialize_success` can come from either:
+
+- `POST /internal/materialize` when the Worker rematerializes artifacts
+- `POST /internal/metrics/materialize` when operators materialize elsewhere and only need to refresh the snapshot metric
+
 ## Example queries
 
 ### Skill views by day and vertical

@@ -630,6 +630,35 @@ describe("lobsterbazaar worker", () => {
     expect(doubles.slice(3)).toEqual([2, 1, 1, 2]);
   });
 
+  it("records snapshot counts without rematerializing artifacts", async () => {
+    const { app, metrics } = await createTestHarness();
+
+    const response = await app.fetch(
+      new Request("https://lobsterbrew.test/internal/metrics/materialize", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-operator-token"
+        }
+      })
+    );
+
+    expect(response.status).toBe(200);
+    const metric = lastMetricWrite(metrics as RecordingMetricsDataset);
+    expect(metric.blobs).toEqual([
+      "materialize_success",
+      "lobsterbrew",
+      "coffee",
+      "/internal/metrics/materialize",
+      "POST",
+      "ok",
+      "2xx",
+      "",
+      "",
+      ""
+    ]);
+    expect((metric.doubles ?? []).slice(3)).toEqual([2, 1, 1, 2]);
+  });
+
   it("does not fail successful requests when the metrics binding throws", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const failingMetrics = {

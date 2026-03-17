@@ -118,6 +118,27 @@ describe("deploy package loading", () => {
     );
   });
 
+  it("parses owner share config and normalizes a leading @", async () => {
+    const files = new Map<string, string>([
+      [
+        "deploy/config.json",
+        JSON.stringify(createDeployConfig({
+          owner_share_x_handle: "@lobsterbrew",
+          owner_share_tagline: "Cart built by claw, approved by human."
+        }))
+      ],
+      [
+        "deploy/merchants.csv",
+        "slug,display_name,store_url,country_codes,notes,claim_status\nsample-roaster,Sample Roaster,https://sample-roaster.com,US,Known sample,claimed"
+      ]
+    ]);
+
+    const deployPackage = await loadDeployPackage("deploy", createFileReader(files), IMPORTED_AT);
+
+    expect(deployPackage.config.ownerShareXHandle).toBe("lobsterbrew");
+    expect(deployPackage.config.ownerShareTagline).toBe("Cart built by claw, approved by human.");
+  });
+
   it("rejects offers imported for unclaimed merchants", async () => {
     const files = new Map<string, string>([
       [
@@ -297,6 +318,8 @@ describe("deploy artifact materialization", () => {
       ]);
 
       expect(skill).toContain("# Lobster Brew Skill");
+      expect(skill).toContain("## Subscription products");
+      expect(skill).toContain("resolution_path = storefront_graphql_fallback");
       expect(skill).toContain("lb_source__ = lobsterbrew");
       expect(country).toContain("\"countryCode\": \"US\"");
       expect(merchant).toContain("\"slug\": \"sample-roaster\"");

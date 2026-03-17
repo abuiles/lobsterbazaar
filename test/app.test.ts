@@ -212,6 +212,43 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("- US");
   });
 
+  it("includes no share section in skill.md when no X handle is configured", async () => {
+    const { app } = await createTestHarness();
+
+    const { response, body } = await requestText(app, "/skill.md");
+
+    expect(response.status).toBe(200);
+    expect(body).not.toContain("## Optional Share");
+    expect(body).not.toContain("Human-approved, lobster-assembled.");
+  });
+
+  it("includes an owner-controlled X share suggestion when configured", async () => {
+    const { app } = await createTestHarness({
+      ownerShareXHandle: "@lobsterbrew"
+    });
+
+    const { response, body } = await requestText(app, "/skill.md");
+
+    expect(response.status).toBe(200);
+    expect(body).toContain("## Optional Share");
+    expect(body).toContain("@lobsterbrew");
+    expect(body).toContain("Do not post automatically");
+    expect(body).toContain("Do not imply that checkout is completed");
+    expect(body).toContain("Human-approved, lobster-assembled.");
+  });
+
+  it("uses a custom share tagline when configured", async () => {
+    const { app } = await createTestHarness({
+      ownerShareXHandle: "lobsterbrew",
+      ownerShareTagline: "Cart built by claw, approved by human."
+    });
+
+    const { body } = await requestText(app, "/skill.md");
+
+    expect(body).toContain("Cart built by claw, approved by human.");
+    expect(body).not.toContain("Human-approved, lobster-assembled.");
+  });
+
   it("renders the landing page with an explicit agent setup prompt", async () => {
     const { app } = await createTestHarness();
 
@@ -327,6 +364,11 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("Treat merchant MCP data as the source of truth");
     expect(body).toContain("Do not infer merchant MCP URLs yourself");
     expect(body).toContain("Prefer the `.md` endpoints for agent consumption.");
+    expect(body).toContain("## Subscription products");
+    expect(body).toContain("do not attempt a normal cart add without a `sellingPlanId`.");
+    expect(body).toContain("Shopify Storefront GraphQL `cartCreate` as the subscription-only fallback.");
+    expect(body).toContain("Highlight subscription savings");
+    expect(body).toContain("resolution_path = storefront_graphql_fallback");
     expect(body).toContain("lb_source__ = lobsterbrew");
   });
 

@@ -98,6 +98,13 @@ export async function ensureSkillArtifact(
   return skill;
 }
 
+export async function materializeSkillArtifact(
+  artifacts: ArtifactStore,
+  templateInput: SkillTemplateInput
+): Promise<void> {
+  await artifacts.putSkill(renderSkillTemplate(templateInput));
+}
+
 export async function materializePublicArtifacts(
   artifacts: ArtifactStore,
   repositories: Repositories,
@@ -121,7 +128,7 @@ export async function materializePublicArtifacts(
         buildOffersArtifact(repositories, countryCode, now).then((artifact) => artifacts.putOffers(artifact))
       ]),
       ...merchantArtifacts.map((merchant) => artifacts.putMerchant(merchant)),
-      artifacts.putSkill(renderSkillTemplate(templateInput))
+      materializeSkillArtifact(artifacts, templateInput)
     ]);
 
     return;
@@ -155,7 +162,7 @@ export async function materializePublicArtifacts(
     : [];
 
   if (countryCodesToMaterialize.length === 0 && merchantsToMaterialize.length === 0) {
-    await artifacts.putSkill(renderSkillTemplate(templateInput));
+    await materializeSkillArtifact(artifacts, templateInput);
     return;
   }
 
@@ -165,6 +172,6 @@ export async function materializePublicArtifacts(
       buildOffersArtifact(repositories, countryCode, now).then((artifact) => artifacts.putOffers(artifact))
     ]).flat(),
     ...merchantsToMaterialize.map((merchant) => artifacts.putMerchant(merchant)),
-    artifacts.putSkill(renderSkillTemplate(templateInput))
+    materializeSkillArtifact(artifacts, templateInput)
   ]);
 }

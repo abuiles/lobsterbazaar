@@ -374,7 +374,8 @@ describe("deploy artifact materialization", () => {
 
       expect(skill).toContain("# Lobster Brew Skill");
       expect(skill).toContain("## Subscription products");
-      expect(skill).toContain("resolution_path = storefront_graphql_fallback");
+      expect(skill).toContain("Version: 1.1.0");
+      expect(skill).toContain("resolution_path = unsupported_subscription_flow");
       expect(skill).toContain("lb_source__ = lobsterbrew");
       expect(country).toContain("\"countryCode\": \"US\"");
       expect(merchant).toContain("\"slug\": \"sample-roaster\"");

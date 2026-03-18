@@ -1,4 +1,11 @@
-import { ensureCountryArtifact, ensureMerchantArtifact, ensureOffersArtifact, ensureSkillArtifact, materializePublicArtifacts } from "./artifacts";
+import {
+  ensureCountryArtifact,
+  ensureMerchantArtifact,
+  ensureOffersArtifact,
+  ensureSkillArtifact,
+  materializePublicArtifacts,
+  materializeSkillArtifact
+} from "./artifacts";
 import { readDeployConfig, type Env } from "./config";
 import type { FeaturedMerchantSummary, MerchantConnectPayload, RegisterClawInput } from "./domain";
 import { badRequest, notFound } from "./errors";
@@ -221,26 +228,32 @@ export function createApp(dependencies: AppDependencies) {
               } else if (normalizedPath === "/internal/materialize" && isMethod(request, "POST")) {
                 requireOperatorAccess(request, dependencies.operatorToken);
 
+                const target = parseMaterializeTarget(url.searchParams.get("target"));
                 const sinceRaw = url.searchParams.get("since");
                 const since = parseSince(sinceRaw);
+                const templateInput = {
+                  brandName: dependencies.config.brandName,
+                  deployId: dependencies.config.deployId,
+                  deployDomain: dependencies.config.deployDomain,
+                  verticalSummary: dependencies.config.verticalSummary,
+                  skillBuyingTargets: dependencies.config.skillBuyingTargets,
+                  registerPath: "/claws/register",
+                  countriesPath: "/countries",
+                  offersPath: "/offers",
+                  merchantConnectPath: "/merchants/{slug}/connect"
+                };
 
-                await materializePublicArtifacts(
-                  dependencies.artifacts,
-                  dependencies.repositories,
-                  dependencies.now(),
-                  {
-                    brandName: dependencies.config.brandName,
-                    deployId: dependencies.config.deployId,
-                    deployDomain: dependencies.config.deployDomain,
-                    verticalSummary: dependencies.config.verticalSummary,
-                    skillBuyingTargets: dependencies.config.skillBuyingTargets,
-                    registerPath: "/claws/register",
-                    countriesPath: "/countries",
-                    offersPath: "/offers",
-                    merchantConnectPath: "/merchants/{slug}/connect"
-                  },
-                  { since }
-                );
+                if (target === "skill") {
+                  await materializeSkillArtifact(dependencies.artifacts, templateInput);
+                } else {
+                  await materializePublicArtifacts(
+                    dependencies.artifacts,
+                    dependencies.repositories,
+                    dependencies.now(),
+                    templateInput,
+                    { since }
+                  );
+                }
 
                 response = json({ ok: true });
               } else if (normalizedPath === "/internal/metrics/materialize" && isMethod(request, "POST")) {
@@ -322,6 +335,18 @@ function parseSince(since: string | null): string | undefined {
   }
 
   return parsed.toISOString();
+}
+
+function parseMaterializeTarget(target: string | null): "all" | "skill" {
+  if (!target) {
+    return "all";
+  }
+
+  if (target === "skill") {
+    return target;
+  }
+
+  throw badRequest("`target` must be `skill` when provided");
 }
 
 function renderCountryMarkdown(artifact: {
@@ -509,7 +534,7 @@ function renderLandingPage(
   featuredMerchants: FeaturedMerchantSummary[]
 ): string {
   const skillUrl = `${origin.replace(/\/$/, "")}/skill.md`;
-  const installInstruction = `Read ${skillUrl} and follow the instructions to join ${config.brandName}.`;
+  const installInstruction = `Read ${skillUrl} and follow the instructions to browse the directory and connect to the right merchant MCP.`;
   const contactEmail = "hello@lobsterstores.com";
   const directoryCards = renderDirectoryCards(config);
   const featuredCards = renderFeaturedMerchantCards(featuredMerchants);
@@ -910,7 +935,7 @@ function renderLandingPage(
           <h1>${config.brandName}</h1>
           <p class="caption muted">${config.verticalSummary}</p>
           <p class="install-copy">Send your agent to ${config.brandName} ${config.emoji}</p>
-<p>Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL, save credentials, and follow instructions (any).</p>
+<p>Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL and follow instructions.</p>
           <div class="surface-switcher" role="tablist" aria-label="Deploy surfaces">
             <button class="surface-tab is-active" type="button" role="tab" aria-selected="true" data-surface-tab="install">install skill</button>
             ${featuredTab}
@@ -926,7 +951,7 @@ function renderLandingPage(
             </div>
             <ol class="steps">
               <li><strong>1.</strong><span>Send this to your agent</span></li>
-              <li><strong>2.</strong><span>Let the agent register once and save its key</span></li>
+              <li><strong>2.</strong><span>Let the agent read the skill and pick a merchant</span></li>
               <li><strong>3.</strong><span>Then the agent can start shopping through the right merchant MCP</span></li>
             </ol>
           </section>

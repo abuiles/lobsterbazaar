@@ -11,7 +11,7 @@ homepage: ${input.deployDomain}
 
 # ${input.brandName} Skill
 
-Version: 0.1
+Version: 1.1.0
 Base URL: ${input.deployDomain}
 
 ${input.verticalSummary}
@@ -23,17 +23,14 @@ Use it when the owner wants to buy ${buyingTargets}. Use it to discover merchant
 - Uses this service as the directory and routing layer
 - Uses each merchant's Shopify Storefront MCP endpoint for live catalog, cart, and checkout work
 - Keeps the owner in control of payment by handing off Shopify checkout instead of completing payment directly
+- Uses the installed skill file as the authoritative instruction source
 
-## Refresh
+## Versioning
 
-- Re-fetch \`${input.deployDomain}/skill.md\` when starting a new session or if the deploy may have changed
-- Treat merchant MCP data as the source of truth for products, pricing, availability, cart state, and checkout URLs
-
-## Install
-
-1. POST to \`${input.deployDomain}${input.registerPath}\`
-2. Save \`claw_id\` and \`api_key\` locally
-3. Do not lose the key
+- Treat \`Version\` in this file as the local skill version
+- Do not re-fetch remote instructions during normal use
+- Runtime requests to \`${input.deployDomain}\` are for directory data only
+- If Lobster Brew returns a version header or version field that differs from this file, note that the local skill may be stale without changing behavior automatically
 
 ## Discovery
 
@@ -60,9 +57,11 @@ Do not infer merchant MCP URLs yourself when a connect response is available.
 
 Prefer the \`.md\` endpoints for agent consumption. Use the JSON endpoints only when a structured machine response is required.
 
+Treat merchant MCP data as the source of truth for products, pricing, availability, cart state, and checkout URLs.
+
 ## Subscription products
 
-When a product or variant supports a subscription, inspect subscription fields before updating the cart.
+When the merchant MCP exposes subscription choices, inspect subscription fields before updating the cart.
 
 1. Check for:
    - \`requiresSellingPlan\` or \`requires_selling_plan\`
@@ -75,22 +74,15 @@ When a product or variant supports a subscription, inspect subscription fields b
 4. Ask the owner to choose a cadence unless a clear preference already exists in local memory.
 5. Highlight subscription savings when \`priceAdjustments\`, \`price\`, or \`compareAtPrice\` show the subscription is cheaper than the one-time purchase.
 6. Try the merchant MCP cart and checkout flow first.
-7. If the merchant MCP cannot create a subscription cart or checkout, use Shopify Storefront GraphQL \`cartCreate\` as the subscription-only fallback. Use the same shop behind the merchant MCP URL. Prefer documented tokenless access when it works for that merchant. Use a storefront access token only when merchant context provides one.
-8. In the GraphQL fallback, send:
-   - \`merchandiseId\`
-   - \`quantity\`
-   - \`sellingPlanId\`
-   - cart \`attributes\`, including \`lb_source__ = ${input.deployId}\`
-9. Request:
-   - \`checkoutUrl\`
-   - \`sellingPlanAllocation\`
-   - \`userErrors\`
+7. If the merchant MCP cannot apply the required selling plan, tell the owner that this merchant flow is not supported yet.
 
 ## Cart rule
 
-When updating carts, attach private cart attribute:
+When updating carts, attach private cart attribute only if the merchant MCP supports cart attributes cleanly:
 
 - \`lb_source__ = ${input.deployId}\`
+
+Otherwise omit the attribute instead of assuming support.
 
 ## Final handoff
 
@@ -108,14 +100,14 @@ When you finish, return a structured summary with:
 - \`resolution_path\`
 
 Use \`resolution_path = mcp_cart\` when merchant MCP created the cart.
-Use \`resolution_path = storefront_graphql_fallback\` when you had to fall back for a subscription checkout.
+Use \`resolution_path = unsupported_subscription_flow\` when a required selling plan could not be applied through the merchant MCP.
 
 Say clearly when:
 
 - the item is subscription-only
 - the available cadences are every 1, 2, or 4 weeks, monthly, or similar
 - the subscription saves money versus one-time purchase
-- the merchant MCP could not attach the selling plan and you used Storefront GraphQL instead
+- the merchant MCP could not attach the required selling plan and the flow is not supported yet
 
 ## Safety
 
@@ -123,5 +115,6 @@ Say clearly when:
 - Keep preferences and prior purchases in your own local memory
 - Do not attempt payment completion
 - Return checkout URL to owner for approval and payment
+- Do not infer merchant MCP URLs yourself when a connect response is available
 `;
 }

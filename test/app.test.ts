@@ -255,8 +255,8 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain(">Lobster Bazaar<");
     expect(body).toContain("Coffee-oriented merchant discovery for lobsters.");
     expect(body).toContain("Send your agent to Lobster Bazaar");
-    expect(body).toContain("Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL, save credentials, and follow instructions (any).");
-    expect(body).toContain("Read https://lobsterbrew.test/skill.md and follow the instructions to join Lobster Bazaar.");
+    expect(body).toContain("Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL and follow instructions.");
+    expect(body).toContain("Read https://lobsterbrew.test/skill.md and follow the instructions to browse the directory and connect to the right merchant MCP.");
     expect(body).toContain("Skill install instruction");
     expect(body.indexOf('data-surface-tab="install">install skill')).toBeLessThan(
       body.indexOf('data-surface-tab="featured">featured merchants')
@@ -269,7 +269,7 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("Known for washed coffees and bright acidity.");
     expect(body).toContain('href="https://sample-roaster.com"');
     expect(body).toContain("sample-roaster.com");
-    expect(body).toContain("Let the agent register once and save its key");
+    expect(body).toContain("Let the agent read the skill and pick a merchant");
     expect(body).toContain("All Lobster Categories");
     expect(body).toContain("Lobster Bread");
     expect(body).toContain("lobsterbread.com");
@@ -515,22 +515,24 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("---\nname: lobsterbrew");
     expect(body).toContain("homepage: lobsterbrew.test");
     expect(body).toContain("# Lobster Bazaar Skill");
+    expect(body).toContain("Version: 1.1.0");
     expect(body).toContain("Base URL: lobsterbrew.test");
     expect(body).toContain("Use it when the owner wants to buy coffee, subscriptions, and brewing gear.");
-    expect(body).toContain("POST to `lobsterbrew.test/claws/register`");
     expect(body).toContain("`GET lobsterbrew.test/countries.md`");
     expect(body).toContain("`GET lobsterbrew.test/countries/{country_code}.md`");
     expect(body).toContain("`GET lobsterbrew.test/offers/{country_code}.md`");
     expect(body).toContain("`lobsterbrew.test/merchants/{slug}/connect.md`");
     expect(body).toContain("Shopify Storefront MCP");
+    expect(body).toContain("Uses the installed skill file as the authoritative instruction source");
+    expect(body).toContain("Do not re-fetch remote instructions during normal use");
     expect(body).toContain("Treat merchant MCP data as the source of truth");
     expect(body).toContain("Do not infer merchant MCP URLs yourself");
     expect(body).toContain("Prefer the `.md` endpoints for agent consumption.");
     expect(body).toContain("## Subscription products");
     expect(body).toContain("do not attempt a normal cart add without a `sellingPlanId`.");
-    expect(body).toContain("Shopify Storefront GraphQL `cartCreate` as the subscription-only fallback.");
+    expect(body).toContain("merchant flow is not supported yet");
     expect(body).toContain("Highlight subscription savings");
-    expect(body).toContain("resolution_path = storefront_graphql_fallback");
+    expect(body).toContain("resolution_path = unsupported_subscription_flow");
     expect(body).toContain("lb_source__ = lobsterbrew");
     expect(lastMetricWrite(metrics as RecordingMetricsDataset).blobs).toEqual([
       "skill_view",
@@ -712,6 +714,27 @@ describe("lobsterbazaar worker", () => {
     ]);
   });
 
+  it("supports materializing only skill.md", async () => {
+    const { app, artifacts } = await createTestHarness();
+
+    await artifacts.putSkill("Version: 0.0.0\n");
+
+    const response = await app.fetch(
+      new Request("https://lobsterbrew.test/internal/materialize?target=skill", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-operator-token"
+        }
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(await artifacts.getSkill()).toContain("Version: 1.1.0");
+    expect(await artifacts.getCountry("US")).toBeNull();
+    expect(await artifacts.getOffers("US")).toBeNull();
+    expect(await artifacts.getMerchant("sample-roaster")).toBeNull();
+  });
+
   it("returns 400 when since is invalid", async () => {
     const { app } = await createTestHarness();
 
@@ -727,6 +750,24 @@ describe("lobsterbazaar worker", () => {
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: { code: string; message: string } };
     expect(body.error.message).toContain("`since` must be an ISO timestamp");
+    expect(body.error.code).toBe("bad_request");
+  });
+
+  it("returns 400 when target is invalid", async () => {
+    const { app } = await createTestHarness();
+
+    const response = await app.fetch(
+      new Request("https://lobsterbrew.test/internal/materialize?target=offers", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-operator-token"
+        }
+      })
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: { code: string; message: string } };
+    expect(body.error.message).toContain("`target` must be `skill` when provided");
     expect(body.error.code).toBe("bad_request");
   });
 

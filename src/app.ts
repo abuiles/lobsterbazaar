@@ -720,6 +720,10 @@ function renderLandingPage(
         font: inherit;
         cursor: pointer;
         text-transform: lowercase;
+        min-width: 0;
+        white-space: normal;
+        line-height: 1.2;
+        text-align: center;
       }
       .surface-tab.is-active {
         background: var(--prompt);
@@ -921,6 +925,15 @@ function renderLandingPage(
         }
         article {
           padding-top: 62px;
+        }
+        .surface-switcher {
+          display: grid;
+          width: 100%;
+          border-radius: 20px;
+        }
+        .surface-tab {
+          width: 100%;
+          padding: 10px 14px;
         }
       }
     </style>

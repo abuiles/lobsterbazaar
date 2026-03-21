@@ -1,21 +1,29 @@
-import type { DeployFileConfig, DeployPackage, Merchant, MerchantClaim, Offer } from "./domain";
+import type { Category, DeployFileConfig, DeployPackage, Merchant, MerchantClaim, Offer } from "./domain";
 import { badRequest, conflict } from "./errors";
 import { normalizeCountryCode } from "./merchant";
 
 type FileReader = (path: string) => Promise<string>;
 
 const MERCHANT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const CATEGORY_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SUPPORTED_CLAIM_MODE = "operator_managed";
 
 const REQUIRED_CONFIG_FIELDS = [
   "deploy_id",
   "deploy_domain",
-  "vertical_id",
-  "vertical_name",
   "brand_name",
-  "brand_description",
-  "vertical_summary"
+  "brand_description"
 ] as const;
+
+interface ParsedDeployConfig {
+  config: DeployFileConfig;
+  legacyCategory?: {
+    slug: string;
+    name: string;
+    summary: string;
+    skillBuyingTargets?: string;
+  };
+}
 
 function splitPipeList(value: string | undefined): string[] {
   if (!value) {
@@ -64,6 +72,14 @@ function assertMerchantSlug(value: string, field: string): string {
   return value;
 }
 
+function assertCategorySlug(value: string, field: string): string {
+  if (!CATEGORY_SLUG_PATTERN.test(value)) {
+    throw badRequest(`${field} must be a lowercase URL-safe slug`);
+  }
+
+  return value;
+}
+
 function parseClaimMode(value: unknown): DeployFileConfig["claimMode"] {
   if (typeof value === "undefined") {
     return SUPPORTED_CLAIM_MODE;
@@ -100,11 +116,22 @@ function isFileNotFoundError(error: unknown): error is NodeJS.ErrnoException {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }
 
-export function parseDeployConfig(text: string): DeployFileConfig {
+function parseDeployConfigWithLegacyCategory(text: string): ParsedDeployConfig {
   const data = parseJsonObject(text);
 
   for (const field of REQUIRED_CONFIG_FIELDS) {
     assertString(data[field], field);
+  }
+
+  const directorySummary =
+    typeof data.directory_summary === "string" && data.directory_summary.trim()
+      ? data.directory_summary.trim()
+      : typeof data.vertical_summary === "string" && data.vertical_summary.trim()
+        ? data.vertical_summary.trim()
+        : null;
+
+  if (!directorySummary) {
+    throw badRequest("directory_summary is required");
   }
 
   const publicDirectory = parseBoolean(data.public_directory, true);
@@ -119,31 +146,115 @@ export function parseDeployConfig(text: string): DeployFileConfig {
     throw badRequest("offers_enabled=false is not supported in V0");
   }
 
+  const skillBuyingTargets =
+    typeof data.skill_buying_targets === "string" && data.skill_buying_targets.trim()
+      ? data.skill_buying_targets.trim()
+      : undefined;
+
+  const legacyVerticalId =
+    typeof data.vertical_id === "string" && data.vertical_id.trim()
+      ? assertCategorySlug(data.vertical_id.trim(), "vertical_id")
+      : undefined;
+  const legacyVerticalName =
+    typeof data.vertical_name === "string" && data.vertical_name.trim()
+      ? data.vertical_name.trim()
+      : undefined;
+  const legacyVerticalSummary =
+    typeof data.vertical_summary === "string" && data.vertical_summary.trim()
+      ? data.vertical_summary.trim()
+      : undefined;
+
+  const hasAnyLegacyVerticalField = Boolean(legacyVerticalId || legacyVerticalName || legacyVerticalSummary);
+  if (
+    hasAnyLegacyVerticalField
+    && (!legacyVerticalId || !legacyVerticalName || !legacyVerticalSummary)
+  ) {
+    throw badRequest("vertical_id, vertical_name, and vertical_summary must be provided together");
+  }
+
+  const legacyCategory = hasAnyLegacyVerticalField
+    ? {
+        slug: legacyVerticalId!,
+        name: legacyVerticalName!,
+        summary: legacyVerticalSummary!,
+        skillBuyingTargets
+      }
+    : undefined;
+
   return {
-    deployId: assertString(data.deploy_id, "deploy_id"),
-    deployDomain: assertString(data.deploy_domain, "deploy_domain"),
-    verticalId: assertString(data.vertical_id, "vertical_id"),
-    verticalName: assertString(data.vertical_name, "vertical_name"),
-    brandName: assertString(data.brand_name, "brand_name"),
-    brandDescription: assertString(data.brand_description, "brand_description"),
-    verticalSummary: assertString(data.vertical_summary, "vertical_summary"),
-    skillBuyingTargets:
-      typeof data.skill_buying_targets === "string" && data.skill_buying_targets.trim()
-        ? data.skill_buying_targets.trim()
-        : undefined,
-    mascotUrl:
-      typeof data.deploy_mascot_url === "string" && data.deploy_mascot_url.trim()
-        ? data.deploy_mascot_url.trim()
-        : "/assets/mascots/lobsterbazaar-default.jpg",
-    emoji: typeof data.emoji === "string" && data.emoji.trim() ? data.emoji.trim() : "🦞",
-    directoryVerticals: [],
-    defaultCountries: Array.isArray(data.default_countries)
-      ? data.default_countries.map((value) => normalizeCountryCode(assertString(value, "default_countries")))
-      : [],
-    publicDirectory,
-    offersEnabled,
-    claimMode
+    config: {
+      deployId: assertString(data.deploy_id, "deploy_id"),
+      deployDomain: assertString(data.deploy_domain, "deploy_domain"),
+      brandName: assertString(data.brand_name, "brand_name"),
+      brandDescription: assertString(data.brand_description, "brand_description"),
+      directorySummary,
+      skillBuyingTargets,
+      mascotUrl:
+        typeof data.deploy_mascot_url === "string" && data.deploy_mascot_url.trim()
+          ? data.deploy_mascot_url.trim()
+          : "/assets/mascots/lobsterbazaar-default.jpg",
+      emoji: typeof data.emoji === "string" && data.emoji.trim() ? data.emoji.trim() : "🦞",
+      defaultCountries: Array.isArray(data.default_countries)
+        ? data.default_countries.map((value) => normalizeCountryCode(assertString(value, "default_countries")))
+        : [],
+      publicDirectory,
+      offersEnabled,
+      claimMode
+    },
+    legacyCategory
   };
+}
+
+export function parseDeployConfig(text: string): DeployFileConfig {
+  return parseDeployConfigWithLegacyCategory(text).config;
+}
+
+export function parseCategoriesFile(text: string, importedAt = "2026-03-15T00:00:00Z"): Category[] {
+  let data: unknown;
+
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw badRequest("Categories file must be valid JSON");
+  }
+
+  if (!Array.isArray(data)) {
+    throw badRequest("Categories file must be a JSON array");
+  }
+
+  const categories = data.map((entry, index) => {
+    if (!entry || typeof entry !== "object") {
+      throw badRequest(`categories[${index}] must be an object`);
+    }
+
+    const record = entry as Record<string, unknown>;
+    const name =
+      typeof record.name === "string" && record.name.trim()
+        ? record.name.trim()
+        : assertString(record.display_name, `categories[${index}].display_name`);
+
+    return {
+      slug: assertCategorySlug(
+        assertString(record.slug, `categories[${index}].slug`),
+        `categories[${index}].slug`
+      ),
+      name,
+      summary: assertString(record.summary, `categories[${index}].summary`),
+      skillBuyingTargets:
+        typeof record.skill_buying_targets === "string" && record.skill_buying_targets.trim()
+          ? record.skill_buying_targets.trim()
+          : undefined,
+      createdAt: importedAt,
+      updatedAt: importedAt
+    };
+  });
+
+  assertUnique(
+    categories.map((category) => category.slug),
+    "category slug"
+  );
+
+  return categories;
 }
 
 export function parseCsv(text: string): Array<Record<string, string>> {
@@ -215,16 +326,42 @@ export function parseCsv(text: string): Array<Record<string, string>> {
   });
 }
 
-export function parseMerchantManifest(text: string, importedAt = "2026-03-15T00:00:00Z"): Merchant[] {
+export function parseMerchantManifest(
+  text: string,
+  importedAt = "2026-03-15T00:00:00Z",
+  options: {
+    defaultCategorySlugs?: string[];
+    knownCategorySlugs?: Set<string>;
+  } = {}
+): Merchant[] {
   const merchants = parseCsv(text).map((row) => {
     const slug = assertMerchantSlug(assertString(row.slug, "slug"), "slug");
     const displayName = assertString(row.display_name, "display_name");
     const storeUrl = assertString(row.store_url, "store_url");
     const notes = assertString(row.notes, "notes");
     const countryCodes = splitPipeList(row.country_codes).map(normalizeCountryCode);
+    const categorySlugs = splitPipeList(row.category_slugs);
 
     if (countryCodes.length === 0) {
       throw badRequest(`country_codes is required for merchant ${slug}`);
+    }
+
+    const resolvedCategorySlugs = (
+      categorySlugs.length > 0 ? categorySlugs : (options.defaultCategorySlugs ?? [])
+    ).map((categorySlug) => assertCategorySlug(categorySlug, `category_slugs for merchant ${slug}`));
+
+    if (resolvedCategorySlugs.length === 0) {
+      throw badRequest(`category_slugs is required for merchant ${slug}`);
+    }
+
+    assertUnique(resolvedCategorySlugs, `category slug for merchant ${slug}`);
+
+    if (options.knownCategorySlugs) {
+      for (const categorySlug of resolvedCategorySlugs) {
+        if (!options.knownCategorySlugs.has(categorySlug)) {
+          throw badRequest(`merchant ${slug} references unknown category ${categorySlug}`);
+        }
+      }
     }
 
     return {
@@ -234,6 +371,7 @@ export function parseMerchantManifest(text: string, importedAt = "2026-03-15T00:
       storeDomain: row.store_domain || undefined,
       storefrontMcpUrl: row.storefront_mcp_url || undefined,
       countryCodes,
+      categorySlugs: resolvedCategorySlugs,
       locationsSummary: row.locations_summary || undefined,
       notes,
       tags: splitPipeList(row.tags),
@@ -353,8 +491,35 @@ export async function loadDeployPackage(
     readFile(`${baseDir}/merchants.csv`)
   ]);
 
-  const config = parseDeployConfig(configText);
-  const merchants = parseMerchantManifest(merchantsText, importedAt);
+  const { config, legacyCategory } = parseDeployConfigWithLegacyCategory(configText);
+  let categories: Category[] = legacyCategory
+    ? [{
+        slug: legacyCategory.slug,
+        name: legacyCategory.name,
+        summary: legacyCategory.summary,
+        skillBuyingTargets: legacyCategory.skillBuyingTargets,
+        createdAt: importedAt,
+        updatedAt: importedAt
+      }]
+    : [];
+  try {
+    const categoriesText = await readFile(`${baseDir}/categories.json`);
+    categories = parseCategoriesFile(categoriesText, importedAt);
+  } catch (error) {
+    if (!isFileNotFoundError(error)) {
+      throw error;
+    }
+  }
+
+  if (categories.length === 0) {
+    throw badRequest("categories.json is required");
+  }
+
+  const merchants = parseMerchantManifest(merchantsText, importedAt, {
+    defaultCategorySlugs: categories.length === 1 ? [categories[0]!.slug] : undefined,
+    knownCategorySlugs: new Set(categories.map((category) => category.slug))
+  });
+
   const claims = buildImportedClaims(merchants);
 
   let offers: Offer[] = [];
@@ -376,6 +541,7 @@ export async function loadDeployPackage(
 
   return {
     config,
+    categories,
     merchants,
     claims,
     offers

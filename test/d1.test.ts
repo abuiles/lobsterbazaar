@@ -18,6 +18,10 @@ class RecordingStatement {
   }
 
   async first<T>() {
+    if (this.sql.includes("FROM categories")) {
+      return { supported: 1 } as T;
+    }
+
     return null as T | null;
   }
 
@@ -54,6 +58,7 @@ describe("D1Repositories", () => {
       storeDomain: "claimed-roaster.myshopify.com",
       storefrontMcpUrl: "https://claimed-roaster.myshopify.com/api/mcp",
       countryCodes: ["US", "CA"],
+      categorySlugs: ["coffee"],
       locationsSummary: "5+",
       notes: "Runs small seasonal releases.",
       tags: ["coffee"],
@@ -67,5 +72,6 @@ describe("D1Repositories", () => {
     expect(merchantStatement?.sql).toContain("INSERT INTO merchants");
     expect(merchantStatement?.sql).toContain("ON CONFLICT(slug) DO UPDATE");
     expect(merchantStatement?.sql).not.toContain("INSERT OR REPLACE INTO merchants");
+    expect(db.batches[0]?.some((statement) => statement.sql.includes("merchant_categories"))).toBe(true);
   });
 });

@@ -18,6 +18,7 @@ function createDeployConfig(overrides: Record<string, unknown> = {}) {
   return {
     deploy_id: "lobsterbrew",
     deploy_domain: "lobsterbrew.test",
+    directory_summary: "Coffee directory",
     vertical_id: "coffee",
     vertical_name: "Coffee",
     brand_name: "Lobster Brew",
@@ -48,6 +49,7 @@ async function writeDeployPackage(
   deployDir: string,
   options: {
     config?: Record<string, unknown>;
+    categoriesJson?: string;
     merchantsCsv: string;
     offersJson?: string;
   }
@@ -55,6 +57,12 @@ async function writeDeployPackage(
   await mkdir(deployDir, { recursive: true });
   await writeFile(path.join(deployDir, "config.json"), JSON.stringify(options.config ?? createDeployConfig()), "utf8");
   await writeFile(path.join(deployDir, "merchants.csv"), options.merchantsCsv, "utf8");
+
+  if (typeof options.categoriesJson !== "undefined") {
+    await writeFile(path.join(deployDir, "categories.json"), options.categoriesJson, "utf8");
+  } else {
+    await rm(path.join(deployDir, "categories.json"), { force: true });
+  }
 
   if (typeof options.offersJson !== "undefined") {
     await writeFile(path.join(deployDir, "offers.json"), options.offersJson, "utf8");
@@ -67,8 +75,8 @@ describe("deploy package loading", () => {
   it("parses merchant CSV rows with quoted commas", () => {
     const merchants = parseMerchantManifest(
       [
-        "slug,display_name,store_url,country_codes,notes,tags",
-        'quoted-roaster,Quoted Roaster,https://quoted-roaster.com,US,"Notes with a comma, and more detail","coffee|quoted"'
+        "slug,display_name,store_url,country_codes,category_slugs,notes,tags",
+        'quoted-roaster,Quoted Roaster,https://quoted-roaster.com,US,coffee,"Notes with a comma, and more detail","coffee|quoted"'
       ].join("\n"),
       IMPORTED_AT
     );
@@ -76,6 +84,7 @@ describe("deploy package loading", () => {
     expect(merchants).toHaveLength(1);
     expect(merchants[0]?.slug).toBe("quoted-roaster");
     expect(merchants[0]?.notes).toBe("Notes with a comma, and more detail");
+    expect(merchants[0]?.categorySlugs).toEqual(["coffee"]);
     expect(merchants[0]?.tags).toEqual(["coffee", "quoted"]);
   });
 
@@ -192,6 +201,85 @@ describe("deploy package loading", () => {
     );
 
     expect(deployPackage.config.skillBuyingTargets).toBe("breads, pastries, and bakery subscriptions");
+  });
+
+  it("parses explicit categories and merchant category membership", async () => {
+    const deployPackage = await loadDeployPackage(
+      "deploy",
+      createFileReader(
+        new Map<string, string>([
+          ["deploy/config.json", JSON.stringify(createDeployConfig({
+            vertical_id: undefined,
+            vertical_name: undefined,
+            vertical_summary: undefined
+          }))],
+          [
+            "deploy/categories.json",
+            JSON.stringify([
+              {
+                slug: "bread",
+                name: "Bread",
+                summary: "Bread directory"
+              },
+              {
+                slug: "coffee",
+                name: "Coffee",
+                summary: "Coffee directory",
+                skill_buying_targets: "coffee beans and brewing gear"
+              }
+            ])
+          ],
+          [
+            "deploy/merchants.csv",
+            [
+              "slug,display_name,store_url,country_codes,category_slugs,notes,claim_status,claim_contact",
+              "sample-roaster,Sample Roaster,https://sample-roaster.com,US,coffee|bread,Known sample,claimed,hello@sample-roaster.com"
+            ].join("\n")
+          ]
+        ])
+      ),
+      IMPORTED_AT
+    );
+
+    expect(deployPackage.categories.map((category) => category.slug)).toEqual(["bread", "coffee"]);
+    expect(deployPackage.categories[1]?.skillBuyingTargets).toBe("coffee beans and brewing gear");
+    expect(deployPackage.merchants[0]?.categorySlugs).toEqual(["coffee", "bread"]);
+    expect(deployPackage.config.directorySummary).toBe("Coffee directory");
+  });
+
+  it("rejects merchants that reference unknown categories", async () => {
+    await expect(
+      loadDeployPackage(
+        "deploy",
+        createFileReader(
+          new Map<string, string>([
+            ["deploy/config.json", JSON.stringify(createDeployConfig({
+              vertical_id: undefined,
+              vertical_name: undefined,
+              vertical_summary: undefined
+            }))],
+            [
+              "deploy/categories.json",
+              JSON.stringify([
+                {
+                  slug: "coffee",
+                  name: "Coffee",
+                  summary: "Coffee directory"
+                }
+              ])
+            ],
+            [
+              "deploy/merchants.csv",
+              [
+                "slug,display_name,store_url,country_codes,category_slugs,notes",
+                "sample-roaster,Sample Roaster,https://sample-roaster.com,US,coffee|bread,Known sample"
+              ].join("\n")
+            ]
+          ])
+        ),
+        IMPORTED_AT
+      )
+    ).rejects.toThrow(/references unknown category bread/i);
   });
 
   it("rejects offers imported for unclaimed merchants", async () => {
@@ -315,6 +403,7 @@ describe("deploy package loading", () => {
     const secondPackage = await loadDeployPackage("deploy", createFileReader(secondFiles), IMPORTED_AT);
     await importDeployPackage(repositories, secondPackage);
 
+    expect(await repositories.listCategorySlugs()).toEqual(["coffee"]);
     expect((await repositories.listMerchantArtifacts("2026-03-15T12:00:00Z")).map((merchant) => merchant.slug)).toEqual([
       "sample-roaster"
     ]);
@@ -333,12 +422,16 @@ describe("deploy package loading", () => {
     const second = buildDeploySql(deployPackage);
 
     expect(first).toBe(second);
+    expect(first).toContain("INSERT INTO categories");
+    expect(first).toContain("DELETE FROM categories WHERE slug NOT IN ('coffee', 'bread');");
     expect(first).toContain("INSERT INTO merchants");
+    expect(first).toContain("INSERT INTO merchant_categories");
     expect(first).toContain("claim_import_sample-roaster");
     expect(first).toContain("ON CONFLICT(slug) DO UPDATE");
     expect(first).toContain("offer_sample");
     expect(first).toContain("DELETE FROM offers WHERE offer_id NOT IN ('offer_sample');");
     expect(first).toContain("DELETE FROM merchant_claims WHERE claim_id NOT IN ('claim_import_sample-roaster');");
+    expect(first).toContain("DELETE FROM categories WHERE slug NOT IN ('coffee', 'bread');");
     expect(first).toContain("DELETE FROM merchants WHERE slug NOT IN ('sample-roaster', 'plain-roaster');");
     expect(first).not.toContain("BEGIN TRANSACTION;");
     expect(first).not.toContain("COMMIT;");
@@ -379,6 +472,7 @@ describe("deploy artifact materialization", () => {
       expect(skill).toContain("lb_source__ = lobsterbrew");
       expect(country).toContain("\"countryCode\": \"US\"");
       expect(merchant).toContain("\"slug\": \"sample-roaster\"");
+      expect(merchant).toContain("\"categorySlugs\": [");
       expect(offers).toContain("\"offerId\": \"offer_sample\"");
     } finally {
       await rm(outputDir, { recursive: true, force: true });

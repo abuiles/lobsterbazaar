@@ -1,0 +1,14 @@
+[
+  {
+    "slug": "coffee",
+    "name": "Coffee",
+    "summary": "Coffee-oriented merchant discovery for lobsters.",
+    "skill_buying_targets": "coffee, subscriptions, and brewing gear"
+  },
+  {
+    "slug": "bread",
+    "name": "Bread",
+    "summary": "Bread-oriented merchant discovery for lobsters.",
+    "skill_buying_targets": "bread, pastries, and bakery subscriptions"
+  }
+]

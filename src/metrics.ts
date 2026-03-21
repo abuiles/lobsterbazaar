@@ -27,6 +27,7 @@ type TrackedEventName =
 interface RouteMetricDefinition {
   eventName: Exclude<TrackedEventName, "claw_register_success" | "claw_register_failure" | "materialize_success" | "materialize_failure">;
   routeId: string;
+  categorySlug?: string;
   merchantSlug?: string;
   countryCode?: string;
   actorRole?: RegisterClawInput["role"];
@@ -181,30 +182,30 @@ export async function prepareRequestMetric(request: Request, normalizedPath: str
 
   const categorySkillMatch = normalizedPath.match(CATEGORY_SKILL_ROUTE_PATTERN);
   if (categorySkillMatch) {
-    const categorySlug = categorySkillMatch[1] ?? "";
     return {
       eventName: "skill_view",
-      routeId: `/${categorySlug}/skill`,
+      routeId: "/:category/skill",
+      categorySlug: categorySkillMatch[1] ?? "",
       method
     };
   }
 
   const categoryCountriesMatch = normalizedPath.match(CATEGORY_COUNTRIES_ROUTE_PATTERN);
   if (categoryCountriesMatch) {
-    const categorySlug = categoryCountriesMatch[1] ?? "";
     return {
       eventName: "countries_index_view",
-      routeId: `/${categorySlug}/countries`,
+      routeId: "/:category/countries",
+      categorySlug: categoryCountriesMatch[1] ?? "",
       method
     };
   }
 
   const categoryCountryMatch = normalizedPath.match(CATEGORY_COUNTRY_ROUTE_PATTERN);
   if (categoryCountryMatch) {
-    const categorySlug = categoryCountryMatch[1] ?? "";
     return {
       eventName: "country_view",
-      routeId: `/${categorySlug}/countries/:country_code`,
+      routeId: "/:category/countries/:country_code",
+      categorySlug: categoryCountryMatch[1] ?? "",
       countryCode: normalizeCountryCode(categoryCountryMatch[2] ?? ""),
       method
     };
@@ -212,10 +213,10 @@ export async function prepareRequestMetric(request: Request, normalizedPath: str
 
   const categoryOffersMatch = normalizedPath.match(CATEGORY_OFFERS_ROUTE_PATTERN);
   if (categoryOffersMatch) {
-    const categorySlug = categoryOffersMatch[1] ?? "";
     return {
       eventName: "offers_view",
-      routeId: `/${categorySlug}/offers/:country_code`,
+      routeId: "/:category/offers/:country_code",
+      categorySlug: categoryOffersMatch[1] ?? "",
       countryCode: normalizeCountryCode(categoryOffersMatch[2] ?? ""),
       method
     };
@@ -223,10 +224,10 @@ export async function prepareRequestMetric(request: Request, normalizedPath: str
 
   const categoryMerchantConnectMatch = normalizedPath.match(CATEGORY_MERCHANT_CONNECT_ROUTE_PATTERN);
   if (categoryMerchantConnectMatch) {
-    const categorySlug = categoryMerchantConnectMatch[1] ?? "";
     return {
       eventName: "merchant_connect_view",
-      routeId: `/${categorySlug}/merchants/:slug/connect`,
+      routeId: "/:category/merchants/:slug/connect",
+      categorySlug: categoryMerchantConnectMatch[1] ?? "",
       merchantSlug: categoryMerchantConnectMatch[2] ?? "",
       method
     };
@@ -276,11 +277,12 @@ export function recordRequestMetric({
   }
 
   const eventName = resolveEventName(metric, response);
+  const metricScope = metric.categorySlug ?? config.verticalId || config.deployId;
   dataset.writeDataPoint({
     blobs: [
       eventName,
       config.deployId,
-      config.verticalId,
+      metricScope,
       metric.routeId,
       metric.method,
       normalizeOutcome(error, response.status),
@@ -298,6 +300,6 @@ export function recordRequestMetric({
       snapshot?.claimedMerchantCount ?? 0,
       snapshot?.countryCount ?? 0
     ],
-    indexes: [config.verticalId || config.deployId]
+    indexes: [metricScope]
   });
 }

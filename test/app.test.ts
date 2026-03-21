@@ -291,6 +291,7 @@ describe("lobsterbazaar worker", () => {
       storeDomain: "sample-roaster.myshopify.com",
       storefrontMcpUrl: undefined,
       countryCodes: ["US"],
+      categorySlugs: ["coffee"],
       locationsSummary: "20+",
       notes: "Known for washed coffees and bright acidity.",
       tags: ["coffee", "specialty"],
@@ -310,6 +311,12 @@ describe("lobsterbazaar worker", () => {
   it("lists only featured merchants from repository data", async () => {
     const repositories = new MemoryRepositories();
 
+    await repositories.putCategory({
+      slug: "coffee",
+      name: "Coffee",
+      summary: "Coffee-oriented merchant discovery for lobsters."
+    });
+
     await repositories.putMerchant({
       slug: "alpha-roaster",
       displayName: "Alpha Roaster",
@@ -317,6 +324,7 @@ describe("lobsterbazaar worker", () => {
       storeDomain: "alpha-roaster.myshopify.com",
       storefrontMcpUrl: undefined,
       countryCodes: ["US"],
+      categorySlugs: ["coffee"],
       locationsSummary: "2 cafes",
       notes: "Alpha description",
       tags: ["coffee"],
@@ -334,6 +342,7 @@ describe("lobsterbazaar worker", () => {
       storeDomain: "beta-roaster.myshopify.com",
       storefrontMcpUrl: undefined,
       countryCodes: ["US"],
+      categorySlugs: ["coffee"],
       locationsSummary: "1 cafe",
       notes: "Beta description",
       tags: ["coffee"],
@@ -351,6 +360,7 @@ describe("lobsterbazaar worker", () => {
       storeDomain: "gamma-roaster.myshopify.com",
       storefrontMcpUrl: undefined,
       countryCodes: ["US"],
+      categorySlugs: ["coffee"],
       locationsSummary: "4 cafes",
       notes: "Gamma description",
       tags: ["coffee"],
@@ -575,6 +585,7 @@ describe("lobsterbazaar worker", () => {
       storeDomain: "fresh-roaster.myshopify.com",
       storefrontMcpUrl: undefined,
       countryCodes: ["US"],
+      categorySlugs: ["coffee"],
       locationsSummary: "2 cafes",
       notes: "Freshly imported for rematerialization coverage.",
       tags: ["coffee"],
@@ -654,6 +665,7 @@ describe("lobsterbazaar worker", () => {
       storeDomain: "fresh-roaster.myshopify.com",
       storefrontMcpUrl: undefined,
       countryCodes: ["US"],
+      categorySlugs: ["coffee"],
       locationsSummary: "2 cafes",
       notes: "Freshly imported for incremental materialization coverage.",
       tags: ["coffee"],

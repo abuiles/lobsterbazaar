@@ -4,6 +4,15 @@ export type ClaimStatus = "unclaimed" | "claimed";
 
 export type OfferStatus = "draft" | "active" | "expired";
 
+export interface Category {
+  slug: string;
+  name: string;
+  summary: string;
+  skillBuyingTargets?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Merchant {
   slug: string;
   displayName: string;
@@ -11,6 +20,7 @@ export interface Merchant {
   storeDomain?: string;
   storefrontMcpUrl?: string;
   countryCodes: string[];
+  categorySlugs: string[];
   locationsSummary?: string;
   notes: string;
   tags: string[];
@@ -142,6 +152,7 @@ export interface MerchantArtifact {
   displayName: string;
   storeUrl: string;
   countryCodes: string[];
+  categorySlugs: string[];
   notes: string;
   storefrontMcpUrl: string;
   claimStatus: ClaimStatus;
@@ -182,10 +193,15 @@ export interface DeployConfig {
   directoryVerticals: DirectoryVertical[];
 }
 
-export interface DeployFileConfig extends DeployConfig {
-  verticalId: string;
-  verticalName: string;
+export interface DeployFileConfig {
+  brandName: string;
+  deployId: string;
+  deployDomain: string;
   brandDescription: string;
+  directorySummary: string;
+  skillBuyingTargets?: string;
+  mascotUrl: string;
+  emoji: string;
   defaultCountries: string[];
   publicDirectory: boolean;
   offersEnabled: boolean;
@@ -194,6 +210,7 @@ export interface DeployFileConfig extends DeployConfig {
 
 export interface DeployPackage {
   config: DeployFileConfig;
+  categories: Category[];
   merchants: Merchant[];
   claims: MerchantClaim[];
   offers: Offer[];

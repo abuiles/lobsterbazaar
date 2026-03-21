@@ -6,12 +6,14 @@ async function deleteMissingRecords(
   repositories: Repositories,
   deployPackage: DeployPackage
 ): Promise<void> {
-  const [existingMerchantSlugs, existingClaimIds, existingOfferIds] = await Promise.all([
+  const [existingCategorySlugs, existingMerchantSlugs, existingClaimIds, existingOfferIds] = await Promise.all([
+    repositories.listCategorySlugs(),
     repositories.listMerchantSlugs(),
     repositories.listClaimIds(),
     repositories.listOfferIds()
   ]);
 
+  const categorySlugs = new Set(deployPackage.categories.map((category) => category.slug));
   const merchantSlugs = new Set(deployPackage.merchants.map((merchant) => merchant.slug));
   const claimIds = new Set(deployPackage.claims.map((claim) => claim.claimId));
   const offerIds = new Set(deployPackage.offers.map((offer) => offer.offerId));
@@ -33,6 +35,12 @@ async function deleteMissingRecords(
       await repositories.deleteMerchant(merchantSlug);
     }
   }
+
+  for (const categorySlug of existingCategorySlugs) {
+    if (!categorySlugs.has(categorySlug)) {
+      await repositories.deleteCategory(categorySlug);
+    }
+  }
 }
 
 export async function importDeployPackage(
@@ -40,6 +48,10 @@ export async function importDeployPackage(
   deployPackage: DeployPackage
 ): Promise<void> {
   await deleteMissingRecords(repositories, deployPackage);
+
+  for (const category of deployPackage.categories) {
+    await repositories.putCategory(category);
+  }
 
   for (const merchant of deployPackage.merchants) {
     await repositories.putMerchant(merchant);
@@ -64,7 +76,7 @@ export async function materializeDeployPackage(
     brandName: deployPackage.config.brandName,
     deployId: deployPackage.config.deployId,
     deployDomain: deployPackage.config.deployDomain,
-    verticalSummary: deployPackage.config.verticalSummary,
+    verticalSummary: deployPackage.config.directorySummary,
     skillBuyingTargets: deployPackage.config.skillBuyingTargets,
     registerPath: "/claws/register",
     countriesPath: "/countries",

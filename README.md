@@ -63,6 +63,7 @@ Recommended reading order:
 The repo includes a reference deploy package at [`deploys/example`](./deploys/example):
 
 - [`config.json`](./deploys/example/config.json)
+- [`categories.json`](./deploys/example/categories.json)
 - [`merchants.csv`](./deploys/example/merchants.csv)
 - [`offers.json`](./deploys/example/offers.json)
 
@@ -135,13 +136,16 @@ Keep real deploy packages under [`deploys/private`](./deploys/private/).
 - files under `deploys/private/` are ignored by git, except for the placeholder docs in that directory
 - materialize public artifacts from private deploys, but do not commit the raw deploy package by default
 
-For deploy packages, set the same branding in `config.json` when you want generated artifacts to carry it too. For example:
+For deploy packages, keep instance identity in `config.json`, define explicit categories in `categories.json`, and assign merchant category membership through the `category_slugs` column in `merchants.csv`.
+
+For branding, set the same fields in `config.json` when you want generated artifacts to carry them too. For example:
 
 ```json
 {
   "deploy_id": "lobsterbrew",
   "brand_name": "Lobster Brew",
-  "emoji": "🦞"
+  "emoji": "🦞",
+  "directory_summary": "Merchant discovery for lobsters."
 }
 ```
 

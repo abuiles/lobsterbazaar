@@ -1,4 +1,5 @@
 import type {
+  Category,
   Claw,
   CountryArtifact,
   CountryMerchantSummary,
@@ -24,7 +25,14 @@ import {
   isOfferActive,
   normalizeCountryCode
 } from "./merchant";
-import type { ArtifactStore, CreateClaimInput, CreateMerchantInput, CreateOfferInput, Repositories } from "./storage";
+import type {
+  ArtifactStore,
+  CreateCategoryInput,
+  CreateClaimInput,
+  CreateMerchantInput,
+  CreateOfferInput,
+  Repositories
+} from "./storage";
 
 export class MemoryArtifactStore implements ArtifactStore {
   private readonly countries = new Map<string, CountryArtifact>();
@@ -66,6 +74,7 @@ export class MemoryArtifactStore implements ArtifactStore {
 }
 
 export class MemoryRepositories implements Repositories {
+  private readonly categories = new Map<string, Category>();
   private readonly merchants = new Map<string, Merchant>();
   private readonly offers = new Map<string, Offer>();
   private readonly claims = new Map<string, MerchantClaim>();
@@ -111,12 +120,49 @@ export class MemoryRepositories implements Repositories {
     return this.merchants.get(slug) ?? null;
   }
 
+  async getCategory(slug: string): Promise<Category | null> {
+    return this.categories.get(slug) ?? null;
+  }
+
+  async listCategories(): Promise<Category[]> {
+    return Array.from(this.categories.values()).sort((left, right) => left.slug.localeCompare(right.slug));
+  }
+
   async listCountryMerchants(countryCode: string, now: string): Promise<CountryMerchantSummary[]> {
     const normalized = normalizeCountryCode(countryCode);
     const activeCounts = await this.listActiveOfferCounts(normalized, now);
 
     return Array.from(this.merchants.values())
       .filter((merchant) => merchant.countryCodes.includes(normalized))
+      .map((merchant) => ({
+        slug: merchant.slug,
+        displayName: merchant.displayName,
+        storeUrl: merchant.storeUrl,
+        summary: buildPublicMerchantSummary({
+          locationsSummary: merchant.locationsSummary,
+          verticalMetadata: merchant.verticalMetadata
+        }),
+        description: buildPublicMerchantDescription({
+          notes: merchant.notes,
+          verticalMetadata: merchant.verticalMetadata
+        }),
+        activeOffersCount: activeCounts.get(merchant.slug) ?? 0
+      }))
+      .sort(compareCountryMerchants);
+  }
+
+  async listCountryMerchantsForCategory(
+    categorySlug: string,
+    countryCode: string,
+    now: string
+  ): Promise<CountryMerchantSummary[]> {
+    const normalizedCategory = categorySlug.trim();
+    const normalizedCountry = normalizeCountryCode(countryCode);
+    const activeCounts = await this.listActiveOfferCountsForCategory(normalizedCategory, normalizedCountry, now);
+
+    return Array.from(this.merchants.values())
+      .filter((merchant) => merchant.categorySlugs.includes(normalizedCategory))
+      .filter((merchant) => merchant.countryCodes.includes(normalizedCountry))
       .map((merchant) => ({
         slug: merchant.slug,
         displayName: merchant.displayName,
@@ -161,12 +207,58 @@ export class MemoryRepositories implements Repositories {
     return Array.from(this.merchants.values()).some((merchant) => merchant.countryCodes.includes(normalized));
   }
 
+  async supportsCategory(slug: string): Promise<boolean> {
+    return this.categories.has(slug.trim());
+  }
+
+  async supportsCountryForCategory(categorySlug: string, countryCode: string): Promise<boolean> {
+    const normalizedCategory = categorySlug.trim();
+    const normalizedCountry = normalizeCountryCode(countryCode);
+    return Array.from(this.merchants.values()).some((merchant) =>
+      merchant.categorySlugs.includes(normalizedCategory) && merchant.countryCodes.includes(normalizedCountry)
+    );
+  }
+
   async listActiveOffers(countryCode: string, now: string): Promise<PublicOffer[]> {
     const normalized = normalizeCountryCode(countryCode);
 
     return Array.from(this.offers.values())
       .filter((offer) => offer.countryCodes.includes(normalized))
       .filter((offer) => isOfferActive(offer, now))
+      .sort((left, right) => {
+        if (left.priority !== right.priority) {
+          return right.priority - left.priority;
+        }
+
+        return left.title.localeCompare(right.title);
+      })
+      .map((offer) => {
+        const merchant = this.merchants.get(offer.merchantSlug);
+        if (!merchant) {
+          throw notFound("Merchant not found");
+        }
+
+        return {
+          offerId: offer.offerId,
+          merchantSlug: offer.merchantSlug,
+          merchantDisplayName: merchant.displayName,
+          title: offer.title,
+          summary: offer.summary,
+          offerType: offer.offerType,
+          validThrough: offer.validThrough,
+          termsText: offer.termsText
+        };
+      });
+  }
+
+  async listActiveOffersForCategory(categorySlug: string, countryCode: string, now: string): Promise<PublicOffer[]> {
+    const normalizedCategory = categorySlug.trim();
+    const normalizedCountry = normalizeCountryCode(countryCode);
+
+    return Array.from(this.offers.values())
+      .filter((offer) => offer.countryCodes.includes(normalizedCountry))
+      .filter((offer) => isOfferActive(offer, now))
+      .filter((offer) => this.merchants.get(offer.merchantSlug)?.categorySlugs.includes(normalizedCategory) === true)
       .sort((left, right) => {
         if (left.priority !== right.priority) {
           return right.priority - left.priority;
@@ -234,6 +326,30 @@ export class MemoryRepositories implements Repositories {
       displayName: merchant.displayName,
       storeUrl: merchant.storeUrl,
       countryCodes: merchant.countryCodes,
+      categorySlugs: merchant.categorySlugs,
+      notes: merchant.notes,
+      storefrontMcpUrl: deriveStorefrontMcpUrl(merchant),
+      claimStatus: merchant.claimStatus,
+      activeOffersCount: activeCounts.get(merchant.slug) ?? 0
+    }));
+  }
+
+  async listMerchantArtifactsForCategory(categorySlug: string, now: string, since?: string): Promise<MerchantArtifact[]> {
+    const normalizedCategory = categorySlug.trim();
+    const merchants = Array.from(this.merchants.values()).filter((merchant) =>
+      merchant.categorySlugs.includes(normalizedCategory)
+    );
+    const sourceMerchants = since
+      ? merchants.filter((merchant) => merchant.createdAt > since)
+      : merchants;
+    const activeCounts = await this.listActiveOfferCountsForCategory(normalizedCategory, undefined, now);
+
+    return sourceMerchants.map((merchant) => ({
+      slug: merchant.slug,
+      displayName: merchant.displayName,
+      storeUrl: merchant.storeUrl,
+      countryCodes: merchant.countryCodes,
+      categorySlugs: merchant.categorySlugs,
       notes: merchant.notes,
       storefrontMcpUrl: deriveStorefrontMcpUrl(merchant),
       claimStatus: merchant.claimStatus,
@@ -245,6 +361,21 @@ export class MemoryRepositories implements Repositories {
     return Array.from(
       new Set(Array.from(this.merchants.values()).flatMap((merchant) => merchant.countryCodes))
     ).sort();
+  }
+
+  async listCountryCodesForCategory(categorySlug: string): Promise<string[]> {
+    const normalizedCategory = categorySlug.trim();
+    return Array.from(
+      new Set(
+        Array.from(this.merchants.values())
+          .filter((merchant) => merchant.categorySlugs.includes(normalizedCategory))
+          .flatMap((merchant) => merchant.countryCodes)
+      )
+    ).sort();
+  }
+
+  async listCategorySlugs(): Promise<string[]> {
+    return Array.from(this.categories.keys()).sort();
   }
 
   async listMerchantSlugs(since?: string): Promise<string[]> {
@@ -293,11 +424,33 @@ export class MemoryRepositories implements Repositories {
     };
   }
 
+  async putCategory(input: CreateCategoryInput): Promise<void> {
+    const now = new Date().toISOString();
+    this.categories.set(input.slug, {
+      ...input,
+      createdAt: input.createdAt ?? now,
+      updatedAt: input.updatedAt ?? now
+    });
+  }
+
   async putMerchant(input: CreateMerchantInput): Promise<void> {
     const now = new Date().toISOString();
+    const categorySlugs = Array.from(new Set(input.categorySlugs.map((slug) => slug.trim()).filter(Boolean))).sort();
+
+    if (categorySlugs.length === 0) {
+      throw conflict("Merchants must belong to at least one category");
+    }
+
+    for (const categorySlug of categorySlugs) {
+      if (!this.categories.has(categorySlug)) {
+        throw notFound(`Category not found: ${categorySlug}`);
+      }
+    }
+
     this.merchants.set(input.slug, {
       ...input,
       countryCodes: input.countryCodes.map(normalizeCountryCode),
+      categorySlugs,
       createdAt: input.createdAt ?? now,
       updatedAt: input.updatedAt ?? now
     });
@@ -329,6 +482,28 @@ export class MemoryRepositories implements Repositories {
       createdAt: input.createdAt ?? now,
       updatedAt: input.updatedAt ?? now
     });
+  }
+
+  async deleteCategory(slug: string): Promise<void> {
+    this.categories.delete(slug);
+
+    for (const merchant of Array.from(this.merchants.values())) {
+      if (!merchant.categorySlugs.includes(slug)) {
+        continue;
+      }
+
+      const nextCategorySlugs = merchant.categorySlugs.filter((categorySlug) => categorySlug !== slug);
+      if (nextCategorySlugs.length === 0) {
+        await this.deleteMerchant(merchant.slug);
+        continue;
+      }
+
+      this.merchants.set(merchant.slug, {
+        ...merchant,
+        categorySlugs: nextCategorySlugs,
+        updatedAt: new Date().toISOString()
+      });
+    }
   }
 
   async deleteMerchant(slug: string): Promise<void> {
@@ -376,6 +551,34 @@ export class MemoryRepositories implements Repositories {
       }
 
       if (!isOfferActive(offer, now)) {
+        continue;
+      }
+
+      counts.set(offer.merchantSlug, (counts.get(offer.merchantSlug) ?? 0) + 1);
+    }
+
+    return counts;
+  }
+
+  private async listActiveOfferCountsForCategory(
+    categorySlug: string,
+    countryCode: string | undefined,
+    now: string
+  ): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
+    const normalizedCountry = typeof countryCode === "string" ? normalizeCountryCode(countryCode) : undefined;
+
+    for (const offer of this.offers.values()) {
+      if (normalizedCountry && !offer.countryCodes.includes(normalizedCountry)) {
+        continue;
+      }
+
+      if (!isOfferActive(offer, now)) {
+        continue;
+      }
+
+      const merchant = this.merchants.get(offer.merchantSlug);
+      if (!merchant || !merchant.categorySlugs.includes(categorySlug)) {
         continue;
       }
 

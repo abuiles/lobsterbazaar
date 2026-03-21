@@ -23,6 +23,20 @@ export async function createTestHarness(options: TestHarnessOptions = {}) {
   const includeClaimAccess = options.includeClaimAccess ?? true;
   const includeSeedOffers = options.includeSeedOffers ?? true;
 
+  await repositories.putCategory({
+    slug: "coffee",
+    name: "Coffee",
+    summary: "Coffee-oriented merchant discovery for lobsters.",
+    skillBuyingTargets: "coffee, subscriptions, and brewing gear"
+  });
+
+  await repositories.putCategory({
+    slug: "bread",
+    name: "Bread",
+    summary: "Bread-oriented merchant discovery for lobsters.",
+    skillBuyingTargets: "bread, pastries, and bakery subscriptions"
+  });
+
   await repositories.putMerchant({
     slug: "sample-roaster",
     displayName: "Sample Roaster",
@@ -30,6 +44,7 @@ export async function createTestHarness(options: TestHarnessOptions = {}) {
     storeDomain: "sample-roaster.myshopify.com",
     storefrontMcpUrl: undefined,
     countryCodes: ["US"],
+    categorySlugs: ["coffee"],
     locationsSummary: "20+",
     notes: "Known for washed coffees and bright acidity.",
     tags: ["coffee", "specialty"],
@@ -47,6 +62,7 @@ export async function createTestHarness(options: TestHarnessOptions = {}) {
     storeDomain: "claimed-roaster.myshopify.com",
     storefrontMcpUrl: undefined,
     countryCodes: ["US", "CA"],
+    categorySlugs: ["bread", "coffee"],
     locationsSummary: "5+",
     notes: "Runs small seasonal releases.",
     tags: ["coffee"],

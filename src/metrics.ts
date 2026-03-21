@@ -4,11 +4,17 @@ import { normalizeCountryCode } from "./merchant";
 const COUNTRIES_ROUTE_PATTERN = /^\/countries\/([A-Za-z]{2,3})$/;
 const OFFERS_ROUTE_PATTERN = /^\/offers\/([A-Za-z]{2,3})$/;
 const MERCHANT_CONNECT_ROUTE_PATTERN = /^\/merchants\/([^/]+)\/connect$/;
+const CATEGORY_SKILL_ROUTE_PATTERN = /^\/([^/]+)\/skill$/;
+const CATEGORY_COUNTRIES_ROUTE_PATTERN = /^\/([^/]+)\/countries$/;
+const CATEGORY_COUNTRY_ROUTE_PATTERN = /^\/([^/]+)\/countries\/([A-Za-z]{2,3})$/;
+const CATEGORY_OFFERS_ROUTE_PATTERN = /^\/([^/]+)\/offers\/([A-Za-z]{2,3})$/;
+const CATEGORY_MERCHANT_CONNECT_ROUTE_PATTERN = /^\/([^/]+)\/merchants\/([^/]+)\/connect$/;
 const MATERIALIZE_ROUTE_IDS = new Set(["/internal/materialize", "/internal/metrics/materialize"]);
 
 type TrackedEventName =
   | "landing_view"
   | "skill_view"
+  | "categories_index_view"
   | "countries_index_view"
   | "country_view"
   | "offers_view"
@@ -127,6 +133,14 @@ export async function prepareRequestMetric(request: Request, normalizedPath: str
     };
   }
 
+  if (normalizedPath === "/categories") {
+    return {
+      eventName: "categories_index_view",
+      routeId: "/categories",
+      method
+    };
+  }
+
   if (normalizedPath === "/countries") {
     return {
       eventName: "countries_index_view",
@@ -161,6 +175,59 @@ export async function prepareRequestMetric(request: Request, normalizedPath: str
       eventName: "merchant_connect_view",
       routeId: "/merchants/:slug/connect",
       merchantSlug: merchantConnectMatch[1] ?? "",
+      method
+    };
+  }
+
+  const categorySkillMatch = normalizedPath.match(CATEGORY_SKILL_ROUTE_PATTERN);
+  if (categorySkillMatch) {
+    const categorySlug = categorySkillMatch[1] ?? "";
+    return {
+      eventName: "skill_view",
+      routeId: `/${categorySlug}/skill`,
+      method
+    };
+  }
+
+  const categoryCountriesMatch = normalizedPath.match(CATEGORY_COUNTRIES_ROUTE_PATTERN);
+  if (categoryCountriesMatch) {
+    const categorySlug = categoryCountriesMatch[1] ?? "";
+    return {
+      eventName: "countries_index_view",
+      routeId: `/${categorySlug}/countries`,
+      method
+    };
+  }
+
+  const categoryCountryMatch = normalizedPath.match(CATEGORY_COUNTRY_ROUTE_PATTERN);
+  if (categoryCountryMatch) {
+    const categorySlug = categoryCountryMatch[1] ?? "";
+    return {
+      eventName: "country_view",
+      routeId: `/${categorySlug}/countries/:country_code`,
+      countryCode: normalizeCountryCode(categoryCountryMatch[2] ?? ""),
+      method
+    };
+  }
+
+  const categoryOffersMatch = normalizedPath.match(CATEGORY_OFFERS_ROUTE_PATTERN);
+  if (categoryOffersMatch) {
+    const categorySlug = categoryOffersMatch[1] ?? "";
+    return {
+      eventName: "offers_view",
+      routeId: `/${categorySlug}/offers/:country_code`,
+      countryCode: normalizeCountryCode(categoryOffersMatch[2] ?? ""),
+      method
+    };
+  }
+
+  const categoryMerchantConnectMatch = normalizedPath.match(CATEGORY_MERCHANT_CONNECT_ROUTE_PATTERN);
+  if (categoryMerchantConnectMatch) {
+    const categorySlug = categoryMerchantConnectMatch[1] ?? "";
+    return {
+      eventName: "merchant_connect_view",
+      routeId: `/${categorySlug}/merchants/:slug/connect`,
+      merchantSlug: categoryMerchantConnectMatch[2] ?? "",
       method
     };
   }

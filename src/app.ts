@@ -944,7 +944,7 @@ function renderRootSurfaceLandingPage(
   const onboardingBody = merchantOnboarding.body ?? "Install the Shopify app to create or manage your listing.";
   const onboardingCtaLabel = merchantOnboarding.ctaLabel ?? "Install the Shopify app";
   const onboardingCtaHref = merchantOnboarding.ctaHref ?? "https://apps.shopify.com/store-agent-kit";
-  const onboardingNote = merchantOnboarding.note ?? "Merchant setup lives below the directory so discovery stays first.";
+  const onboardingNote = (merchantOnboarding.note ?? "Merchant setup lives below the directory so discovery stays first.").trim();
   const onboardingBullets = merchantOnboarding.bullets ?? [
     "Create your merchant listing in the app after installation.",
     "Keep your listing details current in the app.",
@@ -1049,7 +1049,7 @@ function renderRootSurfaceLandingPage(
         <div class="surface-onboarding__content">
           <div class="surface-onboarding__lead">
             <a class="surface-onboarding__cta" href="${escapeHtml(onboardingCtaHref)}">${escapeHtml(onboardingCtaLabel)}</a>
-            <p class="surface-onboarding__note">${escapeHtml(onboardingNote)}</p>
+            ${onboardingNote ? `<p class="surface-onboarding__note">${escapeHtml(onboardingNote)}</p>` : ""}
           </div>
           <div class="surface-onboarding__details">
             <ul class="surface-onboarding__bullets">
@@ -1109,9 +1109,6 @@ function renderRootSurfaceLandingPage(
             <a class="surface-hero__cta surface-hero__cta--primary" href="${escapeHtml(heroPrimary.href)}">${escapeHtml(heroPrimary.label)}</a>
             <a class="surface-hero__cta surface-hero__cta--secondary" href="${escapeHtml(heroSecondary.href)}">${escapeHtml(heroSecondary.label)}</a>
             <a class="surface-hero__cta surface-hero__cta--ghost" href="${escapeHtml(heroTertiary.href)}">${escapeHtml(heroTertiary.label)}</a>
-          </div>
-          <div class="surface-hero__note">
-            Focus on one category at a time. Discovery starts here; merchant setup and about details stay at the bottom.
           </div>
         </div>
         <div class="surface-hero__panel">

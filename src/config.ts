@@ -37,6 +37,10 @@ function parseString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function parseMaybeString(value: unknown): string | undefined {
+  return typeof value === "string" ? value.trim() : undefined;
+}
+
 function parseLink(value: unknown): RootSurfaceLink | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
@@ -71,7 +75,7 @@ function parseSectionCopy(value: unknown): RootSurfaceConfig["categories"] | und
 
   const record = value as Record<string, unknown>;
   const title = parseString(record.title);
-  const body = parseString(record.body) ?? parseString(record.description);
+  const body = parseMaybeString(record.body) ?? parseMaybeString(record.description);
 
   if (!title && !body) {
     return undefined;
@@ -115,7 +119,7 @@ function parseMerchantOnboarding(value: unknown): RootSurfaceConfig["merchantOnb
   const body = parseString(record.body) ?? parseString(record.description);
   const ctaHref = parseString(record.ctaHref) ?? parseString(record.appUrl);
   const ctaLabel = parseString(record.ctaLabel) ?? parseString(record.appLabel);
-  const note = parseString(record.note);
+  const note = parseMaybeString(record.note);
   const bullets = Array.isArray(record.bullets)
     ? record.bullets.map((entry) => parseString(entry)).filter((entry): entry is string => Boolean(entry))
     : undefined;

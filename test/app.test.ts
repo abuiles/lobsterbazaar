@@ -189,49 +189,42 @@ describe("lobsterbazaar worker", () => {
           sectionOrder: ["hero", "categories", "merchant_onboarding"],
           hero: {
             eyebrow: "discovery for OpenClaw and AI shoppers",
-            title: "Discover Shopify stores by category.",
-            body: "Lobster Stores helps OpenClaw and other AI shoppers browse Shopify merchants by category, move through one discovery lane at a time, and hand off to merchant checkout when the fit is clear.",
+            title: "Help OpenClaw and AI shoppers discover Shopify merchants.",
+            body: "Lobster Stores helps shoppers explore Shopify merchants, compare stores, and hand off to the right storefront when the fit is clear.",
             imageUrl: "https://lobsterstores.com/assets/mascots/lobsterstores.jpg",
             imageAlt: "Lobster Stores mascot",
             primaryCta: {
-              label: "Use with AI shoppers",
+              label: "install the skill",
               href: "#install"
             },
             secondaryCta: {
-              label: "Browse categories",
+              label: "browse merchants",
               href: "#directory"
             },
             tertiaryCta: {
-              label: "Register your store",
+              label: "register your store",
               href: "#register"
             }
           },
           install: {
-            title: "Use Lobster Stores with OpenClaw or your preferred AI shopper.",
-            body: "Browse the directory by category, compare merchants, and hand off to the right storefront when you are ready to shop.",
-            primaryCta: {
-              label: "Open the root skill",
-              href: "/skill.md"
-            },
-            secondaryCta: {
-              label: "Browse categories",
-              href: "/categories"
-            }
+            title: "send your agent to Lobster Stores.",
+            body: "Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL and follow instructions. Start with the directory skill to browse Shopify merchants, compare stores, and hand off to the right storefront when you are ready to shop.",
+            prompt: "Read https://lobsterstores.com/skill.md and use it to browse the Lobster Stores directory of Shopify merchants. Compare stores, explore the directory, and hand off to the right storefront when you are ready to shop."
           },
           categories: {
-            title: "Categories",
-            body: "Browse merchants by category, then go deeper into countries and stores once you know what you want."
+            title: "discover Shopify stores across the lobster map.",
+            body: ""
           },
           categoryOrder: ["coffee", "bread"],
           merchantOnboarding: {
             title: "Merchant onboarding",
-            body: "Install the Shopify app to create your listing.",
+            body: "Install the Shopify app to manage your listing.",
             ctaLabel: "Install Lobster Stores from the Shopify App Store",
             ctaHref: "https://apps.shopify.com/store-agent-kit",
-            note: "Merchant setup lives below the directory so discovery stays first.",
             bullets: [
               "Create your merchant listing in the app after installation.",
-              "Request verification for an existing listing from the app."
+              "Request verification for an existing listing from the app.",
+              "Verification helps OpenClaw agents and AI shoppers trust your listing faster."
             ],
             supportLinks: [
               {
@@ -245,7 +238,8 @@ describe("lobsterbazaar worker", () => {
             ],
             footerLines: [
               "made for claws, shoppers, and merchants"
-            ]
+            ],
+            note: ""
           }
         }
       } as any,
@@ -258,16 +252,17 @@ describe("lobsterbazaar worker", () => {
     const body = await response.text();
 
     expect(response.status).toBe(200);
-    expect(body).toContain("Discover Shopify stores by category.");
-    expect(body).toContain("Use with AI shoppers");
-    expect(body).toContain("Browse categories");
-    expect(body).toContain("Register your store");
+    expect(body).toContain("Help OpenClaw and AI shoppers discover Shopify merchants.");
+    expect(body).toContain("install the skill");
+    expect(body).toContain("browse merchants");
+    expect(body).toContain("register your store");
     expect(body).toContain("Merchant onboarding");
-    expect(body).toContain("Install the Shopify app to create your listing.");
+    expect(body).toContain("Install the Shopify app to manage your listing.");
     expect(body).toContain("Install Lobster Stores from the Shopify App Store");
     expect(body).toContain("light mode");
-    expect(body).toContain("Use Lobster Stores with OpenClaw or your preferred AI shopper.");
-    expect(body).toContain("Open the root skill");
+    expect(body).toContain("send your agent to Lobster Stores.");
+    expect(body).toContain("Read https://lobsterstores.com/skill.md");
+    expect(body).toContain("discover Shopify stores across the lobster map.");
     expect(body).toContain("/assets/mascots/lobsterbrew-mascot.jpg");
     expect(body).toContain("/assets/mascots/lobsterbread-mascot-v2.jpg");
     expect(body).toContain("https://lobsterstores.com/assets/mascots/lobsterstores.jpg");
@@ -280,7 +275,9 @@ describe("lobsterbazaar worker", () => {
     expect(body).not.toContain("verified listing");
     expect(body).not.toContain("Category index");
     expect(body).not.toContain("Root skill");
-    expect(body).not.toContain("Send your agent");
+    expect(body).not.toContain("Browse categories");
+    expect(body).not.toContain("Merchant setup lives below the directory so discovery stays first.");
+    expect(body).not.toContain("Share your Shopify store URL, category, merchant details, and what makes your business a fit inside the app.");
     expect(body).not.toContain("merchant connect for MCP handoff");
   });
 

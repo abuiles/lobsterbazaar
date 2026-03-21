@@ -80,6 +80,31 @@ function parseSectionCopy(value: unknown): RootSurfaceConfig["categories"] | und
   return { title, body };
 }
 
+function parseInstallConfig(value: unknown): RootSurfaceConfig["install"] | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const title = parseString(record.title);
+  const body = parseString(record.body) ?? parseString(record.description);
+  const prompt = parseString(record.prompt);
+  const primaryCta = parseLink(record.primaryCta);
+  const secondaryCta = parseLink(record.secondaryCta);
+
+  if (!title && !body && !prompt && !primaryCta && !secondaryCta) {
+    return undefined;
+  }
+
+  return {
+    title,
+    body,
+    prompt,
+    primaryCta,
+    secondaryCta
+  };
+}
+
 function parseMerchantOnboarding(value: unknown): RootSurfaceConfig["merchantOnboarding"] | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
@@ -197,6 +222,8 @@ export function parseRootSurfaceConfig(value: unknown): RootSurfaceConfig | unde
           body:
             parseString((heroValue as Record<string, unknown>).body)
             ?? parseString((heroValue as Record<string, unknown>).description),
+          imageUrl: parseString((heroValue as Record<string, unknown>).imageUrl),
+          imageAlt: parseString((heroValue as Record<string, unknown>).imageAlt),
           primaryCta: parseLink((heroValue as Record<string, unknown>).primaryCta),
           secondaryCta: parseLink((heroValue as Record<string, unknown>).secondaryCta),
           tertiaryCta: parseLink((heroValue as Record<string, unknown>).tertiaryCta)
@@ -233,6 +260,7 @@ export function parseRootSurfaceConfig(value: unknown): RootSurfaceConfig | unde
   const rootSurface: RootSurfaceConfig = {
     hero,
     sectionOrder: parseSectionKindList(record.sectionOrder),
+    install: parseInstallConfig(record.install),
     categories: parseSectionCopy(record.categories),
     categoryOrder: Array.isArray(record.categoryOrder)
       ? record.categoryOrder.map((entry) => parseString(entry)).filter((entry): entry is string => Boolean(entry))
@@ -246,6 +274,7 @@ export function parseRootSurfaceConfig(value: unknown): RootSurfaceConfig | unde
   if (
     !rootSurface.hero
     && !rootSurface.sectionOrder
+    && !rootSurface.install
     && !rootSurface.categories
     && !rootSurface.categoryOrder
     && !rootSurface.categoryCards

@@ -65,6 +65,8 @@ interface RootSurfaceHeroConfig {
   eyebrow?: string;
   title?: string;
   body?: string;
+  imageUrl?: string;
+  imageAlt?: string;
   primaryCta?: {
     label: string;
     href: string;
@@ -74,6 +76,20 @@ interface RootSurfaceHeroConfig {
     href: string;
   };
   tertiaryCta?: {
+    label: string;
+    href: string;
+  };
+}
+
+interface RootSurfaceInstallConfig {
+  title?: string;
+  body?: string;
+  prompt?: string;
+  primaryCta?: {
+    label: string;
+    href: string;
+  };
+  secondaryCta?: {
     label: string;
     href: string;
   };
@@ -89,6 +105,7 @@ interface RootSurfaceNetworkEntry {
 interface RootSurfaceConfig {
   sectionOrder?: RootSurfaceSectionName[];
   hero?: RootSurfaceHeroConfig;
+  install?: RootSurfaceInstallConfig;
   categories?: {
     title?: string;
     body?: string;
@@ -906,6 +923,7 @@ function renderRootSurfaceLandingPage(
   const categoriesUrl = `${rootUrl}/categories.md`;
   const merchantOnboarding = surface.merchantOnboarding ?? {};
   const hero = surface.hero ?? {};
+  const install = surface.install ?? {};
   const categoryCards = normalizeRootCategories(categories, surface);
   const featuredMax = surface.featured?.maxItems ?? 4;
   const featuredList = featuredMerchants.slice(0, featuredMax);
@@ -917,6 +935,8 @@ function renderRootSurfaceLandingPage(
   const heroPrimary = hero.primaryCta ?? { label: "> install the skill", href: "#install" };
   const heroSecondary = hero.secondaryCta ?? { label: "> browse directory", href: "#directory" };
   const heroTertiary = hero.tertiaryCta ?? { label: "> merchant onboarding", href: "#register" };
+  const heroImageUrl = hero.imageUrl?.trim();
+  const heroImageAlt = hero.imageAlt?.trim() || `${config.brandName} mascot`;
   const categoriesTitle = surface.categories?.title ?? "Categories";
   const categoriesBody = surface.categories?.body ?? "Start with a category, open its skill, then browse countries, merchants, and connect prompts inside that lane.";
   const categoriesEmpty = surface.categories?.emptyMessage ?? "No categories are available yet.";
@@ -933,7 +953,11 @@ function renderRootSurfaceLandingPage(
   ];
   const onboardingSupportLinks = merchantOnboarding.supportLinks ?? [];
   const onboardingFooterLines = merchantOnboarding.footerLines ?? [];
-  const installInstruction = `Read ${skillUrl} and use it to browse the directory of merchants by category. Help owners discover merchants, compare stores, and connect to the right storefront.`;
+  const installTitle = install.title ?? `Use ${config.brandName} with your preferred AI shopper.`;
+  const installBody = install.body ?? "Start with the root skill, then browse the directory by category to find the right merchants for the shopper.";
+  const installPrompt = install.prompt?.trim();
+  const installPrimaryCta = install.primaryCta ?? { label: "Open root skill", href: skillUrl };
+  const installSecondaryCta = install.secondaryCta ?? { label: "Browse categories", href: categoriesUrl };
   const networkEntries = surface.network?.entries ?? config.directoryVerticals.map((entry) => ({
     brandName: entry.brandName,
     href: entry.url,
@@ -1049,15 +1073,26 @@ function renderRootSurfaceLandingPage(
         <div class="install-grid">
           <div class="install-lead">
             <p class="surface-kicker">install</p>
-            <h2>Send your agent to ${escapeHtml(config.brandName)}.</h2>
-            <p class="install-copy">Works with any agent that can read a URL and follow instructions. Start with the directory skill to discover merchants by category, understand what they sell, and choose the right lane.</p>
+            <h2>${escapeHtml(installTitle)}</h2>
+            <p class="install-copy">${escapeHtml(installBody)}</p>
           </div>
-          <article class="install-card">
-            <div class="prompt">
-              <button class="copy-button" type="button" data-copy-install>copy</button>
-              <pre data-install-instruction>${escapeHtml(installInstruction)}</pre>
-            </div>
-          </article>
+          ${installPrompt
+            ? `
+              <article class="install-card">
+                <div class="prompt">
+                  <button class="copy-button" type="button" data-copy-install>copy</button>
+                  <pre data-install-instruction>${escapeHtml(installPrompt)}</pre>
+                </div>
+              </article>
+            `
+            : `
+              <article class="install-card install-card--human">
+                <div class="install-actions">
+                  <a class="surface-hero__cta surface-hero__cta--primary" href="${escapeHtml(installPrimaryCta.href)}">${escapeHtml(installPrimaryCta.label)}</a>
+                  <a class="surface-hero__cta surface-hero__cta--secondary" href="${escapeHtml(installSecondaryCta.href)}">${escapeHtml(installSecondaryCta.label)}</a>
+                </div>
+              </article>
+            `}
         </div>
       </section>
     `
@@ -1080,23 +1115,21 @@ function renderRootSurfaceLandingPage(
           </div>
         </div>
         <div class="surface-hero__panel">
-          <div class="surface-hero__panel-inner">
-            <div>
-              <p class="surface-kicker">discovery flow</p>
-              <h2>Discover merchants across the directory.</h2>
-              <p>Use the root to pick a category, then let your agent browse countries, merchants, and connect prompts without losing context.</p>
-            </div>
-            <ol class="surface-flow-list">
-              <li><strong>1.</strong><span>Browse categories.</span></li>
-              <li><strong>2.</strong><span>Open a category skill.</span></li>
-              <li><strong>3.</strong><span>Browse countries and merchants.</span></li>
-              <li><strong>4.</strong><span>Use merchant connect for MCP handoff.</span></li>
-            </ol>
-            <div class="surface-quick-links">
-              <a href="${escapeHtml(categoriesUrl)}">Category index</a>
-              <a href="${escapeHtml(skillUrl)}">Root skill</a>
-            </div>
-          </div>
+          ${heroImageUrl
+            ? `
+              <div class="surface-hero__art">
+                <img src="${escapeHtml(heroImageUrl)}" alt="${escapeHtml(heroImageAlt)}">
+              </div>
+            `
+            : `
+              <div class="surface-hero__panel-inner">
+                <div>
+                  <p class="surface-kicker">directory overview</p>
+                  <h2>Discover merchants across the directory.</h2>
+                  <p>Use the root to pick a category, then browse merchants without losing context.</p>
+                </div>
+              </div>
+            `}
         </div>
       </section>
     `
@@ -1426,6 +1459,18 @@ function renderRootSurfaceLandingPage(
           linear-gradient(180deg, var(--hero-card-tint), var(--hero-card-fade)),
           linear-gradient(180deg, var(--surface-overlay-top), var(--surface-overlay-bottom));
       }
+      .surface-hero__art {
+        border-radius: 18px;
+        overflow: hidden;
+        background: rgba(255,255,255,0.04);
+      }
+      .surface-hero__art img {
+        width: 100%;
+        height: 100%;
+        min-height: 320px;
+        object-fit: cover;
+        display: block;
+      }
       .surface-hero__panel-inner {
         display: grid;
         align-content: start;
@@ -1570,6 +1615,37 @@ function renderRootSurfaceLandingPage(
       .surface-onboarding {
         display: grid;
         gap: 18px;
+      }
+      .install-grid {
+        display: grid;
+        gap: 18px;
+      }
+      @media (min-width: 920px) {
+        .install-grid {
+          grid-template-columns: minmax(0, 1fr) minmax(300px, 0.9fr);
+        }
+      }
+      .install-lead h2 {
+        margin: 0 0 10px;
+        font-size: clamp(1.6rem, 2.2vw, 2.35rem);
+        line-height: 1.02;
+        letter-spacing: -0.045em;
+      }
+      .install-copy {
+        margin: 0;
+        color: var(--muted);
+      }
+      .install-card {
+        min-width: 0;
+      }
+      .install-card--human {
+        display: grid;
+        align-items: center;
+      }
+      .install-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
       }
       .surface-onboarding__content {
         display: grid;

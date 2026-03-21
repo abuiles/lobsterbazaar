@@ -134,6 +134,8 @@ export interface RootSurfaceHero {
   eyebrow?: string;
   title?: string;
   body?: string;
+  imageUrl?: string;
+  imageAlt?: string;
   primaryCta?: RootSurfaceLink;
   secondaryCta?: RootSurfaceLink;
   tertiaryCta?: RootSurfaceLink;
@@ -157,6 +159,12 @@ export interface RootSurfaceCategoryCardConfig {
 
 export interface RootSurfaceFeaturedConfig extends RootSurfaceSectionCopy {
   maxItems?: number;
+}
+
+export interface RootSurfaceInstallConfig extends RootSurfaceSectionCopy {
+  prompt?: string;
+  primaryCta?: RootSurfaceLink;
+  secondaryCta?: RootSurfaceLink;
 }
 
 export interface RootSurfaceNetworkEntry {
@@ -184,6 +192,7 @@ export interface RootSurfaceMerchantOnboarding {
 export interface RootSurfaceConfig {
   hero?: RootSurfaceHero;
   sectionOrder?: RootSurfaceSectionKind[];
+  install?: RootSurfaceInstallConfig;
   categories?: RootSurfaceSectionCopy;
   categoryOrder?: string[];
   categoryCards?: Record<string, RootSurfaceCategoryCardConfig>;

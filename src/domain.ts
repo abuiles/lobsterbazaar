@@ -8,6 +8,8 @@ export interface Category {
   slug: string;
   name: string;
   summary: string;
+  subtitle?: string;
+  mascotUrl?: string;
   skillBuyingTargets?: string;
   createdAt: string;
   updatedAt: string;
@@ -115,8 +117,77 @@ export interface CategoryDirectoryEntry {
   slug: string;
   name: string;
   summary: string;
+  subtitle?: string;
+  mascotUrl?: string;
   skillPath: string;
   countriesPath: string;
+}
+
+export type RootSurfaceSectionKind = "hero" | "categories" | "featured" | "network" | "merchant_onboarding";
+
+export interface RootSurfaceLink {
+  label: string;
+  href: string;
+}
+
+export interface RootSurfaceHero {
+  eyebrow?: string;
+  title?: string;
+  body?: string;
+  primaryCta?: RootSurfaceLink;
+  secondaryCta?: RootSurfaceLink;
+  tertiaryCta?: RootSurfaceLink;
+}
+
+export interface RootSurfaceSectionCopy {
+  title?: string;
+  body?: string;
+}
+
+export interface RootSurfaceCategoryCardConfig {
+  name?: string;
+  summary?: string;
+  subtitle?: string;
+  mascotUrl?: string;
+  badge?: string;
+  actionLabel?: string;
+  eyebrow?: string;
+  href?: string;
+}
+
+export interface RootSurfaceFeaturedConfig extends RootSurfaceSectionCopy {
+  maxItems?: number;
+}
+
+export interface RootSurfaceNetworkEntry {
+  brandName: string;
+  href: string;
+  subtitle?: string;
+  emoji?: string;
+}
+
+export interface RootSurfaceNetworkConfig extends RootSurfaceSectionCopy {
+  entries?: RootSurfaceNetworkEntry[];
+}
+
+export interface RootSurfaceMerchantOnboarding {
+  title?: string;
+  body?: string;
+  ctaLabel?: string;
+  ctaHref?: string;
+  note?: string;
+  bullets?: string[];
+}
+
+export interface RootSurfaceConfig {
+  hero?: RootSurfaceHero;
+  sectionOrder?: RootSurfaceSectionKind[];
+  categories?: RootSurfaceSectionCopy;
+  categoryOrder?: string[];
+  categoryCards?: Record<string, RootSurfaceCategoryCardConfig>;
+  featured?: RootSurfaceFeaturedConfig;
+  network?: RootSurfaceNetworkConfig;
+  merchantOnboarding?: RootSurfaceMerchantOnboarding;
 }
 
 export interface MerchantConnectPayload {
@@ -214,6 +285,7 @@ export interface DeployConfig {
   mascotUrl: string;
   emoji: string;
   directoryVerticals: DirectoryVertical[];
+  rootSurface?: RootSurfaceConfig;
 }
 
 export interface DeployFileConfig {
@@ -225,6 +297,7 @@ export interface DeployFileConfig {
   skillBuyingTargets?: string;
   mascotUrl: string;
   emoji: string;
+  rootSurface?: RootSurfaceConfig;
   defaultCountries: string[];
   publicDirectory: boolean;
   offersEnabled: boolean;

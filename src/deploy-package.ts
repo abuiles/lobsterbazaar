@@ -1,4 +1,5 @@
 import type { Category, DeployFileConfig, DeployPackage, Merchant, MerchantClaim, Offer } from "./domain";
+import { parseRootSurfaceConfig } from "./config";
 import { badRequest, conflict } from "./errors";
 import { normalizeCountryCode } from "./merchant";
 
@@ -194,6 +195,7 @@ function parseDeployConfigWithLegacyCategory(text: string): ParsedDeployConfig {
           ? data.deploy_mascot_url.trim()
           : "/assets/mascots/lobsterbazaar-default.jpg",
       emoji: typeof data.emoji === "string" && data.emoji.trim() ? data.emoji.trim() : "🦞",
+      rootSurface: parseRootSurfaceConfig(data.root_surface),
       defaultCountries: Array.isArray(data.default_countries)
         ? data.default_countries.map((value) => normalizeCountryCode(assertString(value, "default_countries")))
         : [],
@@ -240,6 +242,14 @@ export function parseCategoriesFile(text: string, importedAt = "2026-03-15T00:00
       ),
       name,
       summary: assertString(record.summary, `categories[${index}].summary`),
+      subtitle:
+        typeof record.subtitle === "string" && record.subtitle.trim()
+          ? record.subtitle.trim()
+          : undefined,
+      mascotUrl:
+        typeof record.mascot_url === "string" && record.mascot_url.trim()
+          ? record.mascot_url.trim()
+          : undefined,
       skillBuyingTargets:
         typeof record.skill_buying_targets === "string" && record.skill_buying_targets.trim()
           ? record.skill_buying_targets.trim()

@@ -33,6 +33,8 @@ interface CategoryRow {
   slug: string;
   name: string;
   summary: string;
+  subtitle: string | null;
+  mascot_url: string | null;
   skill_buying_targets: string | null;
   created_at: string;
   updated_at: string;
@@ -126,6 +128,8 @@ function mapCategory(row: CategoryRow): Category {
     slug: row.slug,
     name: row.name,
     summary: row.summary,
+    subtitle: row.subtitle ?? undefined,
+    mascotUrl: row.mascot_url ?? undefined,
     skillBuyingTargets: row.skill_buying_targets ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -788,11 +792,13 @@ export class D1Repositories implements Repositories {
     await this.db
       .prepare(
         `INSERT INTO categories
-           (slug, name, summary, skill_buying_targets, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+           (slug, name, summary, subtitle, mascot_url, skill_buying_targets, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
          ON CONFLICT(slug) DO UPDATE SET
            name = excluded.name,
            summary = excluded.summary,
+           subtitle = excluded.subtitle,
+           mascot_url = excluded.mascot_url,
            skill_buying_targets = excluded.skill_buying_targets,
            updated_at = excluded.updated_at`
       )
@@ -800,6 +806,8 @@ export class D1Repositories implements Repositories {
         input.slug,
         input.name,
         input.summary,
+        input.subtitle ?? null,
+        input.mascotUrl ?? null,
         input.skillBuyingTargets ?? null,
         createdAt,
         updatedAt

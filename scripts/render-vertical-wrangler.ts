@@ -12,6 +12,7 @@ interface DeployConfigFile {
   skill_buying_targets?: string;
   emoji?: string;
   deploy_mascot_url?: string;
+  root_surface?: unknown;
 }
 
 interface DirectoryDeployEntry {
@@ -192,6 +193,12 @@ async function main() {
     vars.DEPLOY_MASCOT_URL = deployConfig.deploy_mascot_url.trim();
   } else {
     delete vars.DEPLOY_MASCOT_URL;
+  }
+
+  if (typeof deployConfig.root_surface !== "undefined") {
+    vars.ROOT_SURFACE_JSON = JSON.stringify(deployConfig.root_surface);
+  } else {
+    delete vars.ROOT_SURFACE_JSON;
   }
 
   wranglerConfig.$schema = resolveRelativeConfigPath(resolvedDeployDir, wranglerConfig.$schema);

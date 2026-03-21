@@ -36,6 +36,87 @@ interface AppDependencies {
   now: () => string;
 }
 
+type RootSurfaceSectionName = "hero" | "categories" | "featured" | "network" | "merchant_onboarding";
+
+interface RootSurfaceCategoryCardConfig {
+  name?: string;
+  summary?: string;
+  subtitle?: string;
+  mascotUrl?: string;
+  badge?: string;
+  actionLabel?: string;
+  eyebrow?: string;
+  href?: string;
+}
+
+interface RootSurfaceCategoryCard {
+  slug: string;
+  name: string;
+  summary: string;
+  subtitle?: string;
+  mascotUrl: string;
+  badge: string;
+  actionLabel: string;
+  eyebrow?: string;
+  href: string;
+}
+
+interface RootSurfaceHeroConfig {
+  eyebrow?: string;
+  title?: string;
+  body?: string;
+  primaryCta?: {
+    label: string;
+    href: string;
+  };
+  secondaryCta?: {
+    label: string;
+    href: string;
+  };
+}
+
+interface RootSurfaceNetworkEntry {
+  brandName: string;
+  href: string;
+  subtitle?: string;
+  emoji?: string;
+}
+
+interface RootSurfaceConfig {
+  sectionOrder?: RootSurfaceSectionName[];
+  hero?: RootSurfaceHeroConfig;
+  categories?: {
+    title?: string;
+    body?: string;
+    emptyMessage?: string;
+  };
+  categoryOrder?: string[];
+  categoryCards?: Record<string, RootSurfaceCategoryCardConfig>;
+  featured?: {
+    title?: string;
+    body?: string;
+    maxItems?: number;
+  };
+  network?: {
+    title?: string;
+    body?: string;
+    entries?: RootSurfaceNetworkEntry[];
+  };
+  merchantOnboarding?: {
+    title?: string;
+    body?: string;
+    ctaLabel?: string;
+    ctaHref?: string;
+    note?: string;
+    bullets?: string[];
+  };
+}
+
+type ConfigWithRootSurface = ReturnType<typeof readDeployConfig> & {
+  rootSurface?: RootSurfaceConfig;
+  root_surface?: RootSurfaceConfig;
+};
+
 function requireOperatorAccess(request: Request, operatorToken?: string): void {
   const header = request.headers.get("authorization");
   const providedToken = header?.replace(/^Bearer\s+/i, "");
@@ -54,6 +135,83 @@ function buildSkillArtifactInput(config: ReturnType<typeof readDeployConfig>) {
     categoriesPath: "/categories",
     registerPath: "/claws/register"
   };
+}
+
+function readRootSurfaceConfig(config: ConfigWithRootSurface): RootSurfaceConfig | undefined {
+  const rootSurface = config.rootSurface ?? config.root_surface;
+  if (!rootSurface || typeof rootSurface !== "object" || Array.isArray(rootSurface)) {
+    return undefined;
+  }
+
+  return rootSurface as RootSurfaceConfig;
+}
+
+function readOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function readCategoryString(category: CategoryDirectoryEntry | Category, key: "subtitle" | "mascotUrl" | "badge" | "eyebrow"): string | undefined {
+  return readOptionalString((category as unknown as Record<string, unknown>)[key]);
+}
+
+function readRootSurfaceCategoryCard(
+  category: CategoryDirectoryEntry | Category,
+  surface?: RootSurfaceConfig
+): RootSurfaceCategoryCard {
+  const overrides = surface?.categoryCards?.[category.slug] ?? {};
+  const name = readOptionalString(overrides.name) ?? readOptionalString((category as unknown as Record<string, unknown>).name) ?? category.slug;
+  const summary = readOptionalString(overrides.summary) ?? readOptionalString((category as unknown as Record<string, unknown>).summary) ?? "";
+  const subtitle =
+    readOptionalString(overrides.subtitle)
+    ?? readCategoryString(category, "subtitle")
+    ?? readOptionalString(overrides.summary)
+    ?? readOptionalString((category as unknown as Record<string, unknown>).summary);
+
+  return {
+    slug: category.slug,
+    name,
+    summary,
+    subtitle,
+    mascotUrl:
+      readOptionalString(overrides.mascotUrl)
+      ?? readCategoryString(category, "mascotUrl")
+      ?? "/assets/mascots/lobsterbazaar-default.jpg",
+    badge: readOptionalString(overrides.badge) ?? readCategoryString(category, "badge") ?? "open skill",
+    actionLabel: readOptionalString(overrides.actionLabel) ?? "Open skill",
+    eyebrow: readOptionalString(overrides.eyebrow) ?? readCategoryString(category, "eyebrow"),
+    href: readOptionalString(overrides.href) ?? `/${category.slug}/skill.md`
+  };
+}
+
+function normalizeRootCategories(
+  categories: Array<CategoryDirectoryEntry | Category>,
+  surface?: RootSurfaceConfig
+): RootSurfaceCategoryCard[] {
+  const order = surface?.categoryOrder?.map((slug) => slug.trim()).filter(Boolean) ?? [];
+  const bySlug = new Map(categories.map((category) => [category.slug, readRootSurfaceCategoryCard(category, surface)]));
+
+  const ordered = order
+    .map((slug) => bySlug.get(slug))
+    .filter((entry): entry is RootSurfaceCategoryCard => Boolean(entry));
+
+  const seen = new Set(order);
+  const remaining = categories
+    .filter((category) => !seen.has(category.slug))
+    .map((category) => readRootSurfaceCategoryCard(category, surface))
+    .sort((left, right) => left.name!.localeCompare(right.name!));
+
+  return [...ordered, ...remaining];
+}
+
+function readSectionOrder(surface?: RootSurfaceConfig): RootSurfaceSectionName[] {
+  const configured = surface?.sectionOrder?.filter(
+    (section): section is RootSurfaceSectionName =>
+      section === "hero" || section === "categories" || section === "featured" || section === "network" || section === "merchant_onboarding"
+  );
+
+  return configured && configured.length > 0
+    ? configured
+    : ["hero", "categories", "network", "merchant_onboarding"];
 }
 
 export function createApp(dependencies: AppDependencies) {
@@ -78,23 +236,45 @@ export function createApp(dependencies: AppDependencies) {
         }
 
         if (normalizedPath === "/" && isMethod(request, "GET")) {
-          const [featuredMerchants, categoriesArtifact] = await Promise.all([
-            dependencies.repositories.listFeaturedMerchants(dependencies.now()),
-            ensureCategoriesArtifact(
-              dependencies.artifacts,
-              dependencies.repositories,
-              dependencies.now()
-            )
-          ]);
+          const rootSurface = readRootSurfaceConfig(dependencies.config as ConfigWithRootSurface);
+          if (rootSurface) {
+            const sectionOrder = readSectionOrder(rootSurface);
+            const needsFeatured = sectionOrder.includes("featured") || Boolean(rootSurface.featured);
+            const [categories, featuredMerchants] = await Promise.all([
+              dependencies.repositories.listCategories(),
+              needsFeatured
+                ? dependencies.repositories.listFeaturedMerchants(dependencies.now())
+                : Promise.resolve([] as FeaturedMerchantSummary[])
+            ]);
 
-          response = html(
-            renderLegacyLandingPage(
-              dependencies.config,
-              url.origin,
-              featuredMerchants,
-              categoriesArtifact.categories
-            )
-          );
+            response = html(
+              renderRootSurfaceLandingPage(
+                dependencies.config,
+                url.origin,
+                categories,
+                featuredMerchants,
+                rootSurface
+              )
+            );
+          } else {
+            const [featuredMerchants, categoriesArtifact] = await Promise.all([
+              dependencies.repositories.listFeaturedMerchants(dependencies.now()),
+              ensureCategoriesArtifact(
+                dependencies.artifacts,
+                dependencies.repositories,
+                dependencies.now()
+              )
+            ]);
+
+            response = html(
+              renderLegacyLandingPage(
+                dependencies.config,
+                url.origin,
+                featuredMerchants,
+                categoriesArtifact.categories
+              )
+            );
+          }
         } else if (normalizedPath === "/skill" && isMethod(request, "GET")) {
           const skill = await ensureRootSkillArtifact(
             dependencies.artifacts,
@@ -121,6 +301,8 @@ export function createApp(dependencies: AppDependencies) {
                 slug: category.slug,
                 name: category.name,
                 summary: category.summary,
+                subtitle: category.subtitle,
+                mascot_url: category.mascotUrl,
                 skill_path: category.skillPath,
                 countries_path: category.countriesPath
               }))
@@ -698,6 +880,545 @@ function renderLandingPage(
           ${categoryCards}
         </div>
       </section>
+    </main>
+  </body>
+</html>`;
+}
+
+function renderRootSurfaceLandingPage(
+  config: ReturnType<typeof readDeployConfig>,
+  origin: string,
+  categories: Category[],
+  featuredMerchants: FeaturedMerchantSummary[],
+  surface: RootSurfaceConfig
+): string {
+  const rootUrl = origin.replace(/\/$/, "");
+  const skillUrl = `${rootUrl}/skill.md`;
+  const categoriesUrl = `${rootUrl}/categories.md`;
+  const merchantOnboarding = surface.merchantOnboarding ?? {};
+  const hero = surface.hero ?? {};
+  const categoryCards = normalizeRootCategories(categories, surface);
+  const featuredMax = surface.featured?.maxItems ?? 4;
+  const featuredList = featuredMerchants.slice(0, featuredMax);
+  const sectionOrder = readSectionOrder(surface);
+  const networkEntries = surface.network?.entries ?? config.directoryVerticals.map((entry) => ({
+    brandName: entry.brandName,
+    href: entry.url,
+    subtitle: entry.directorySubtitle ?? entry.verticalName ?? "",
+    emoji: entry.emoji ?? "🦞"
+  }));
+  const sections = new Set(sectionOrder);
+  const heroTitle = hero.title ?? "Help OpenClaw discover the right Shopify store.";
+  const heroBody = hero.body ?? "Lobster Stores is a category-first directory for AI shoppers. Start with a category, stay in that namespace, and hand merchant discovery off only when the agent has enough context.";
+  const heroEyebrow = hero.eyebrow ?? "discovery for OpenClaw and AI shoppers";
+  const heroPrimary = hero.primaryCta ?? { label: "Browse categories", href: "#categories" };
+  const heroSecondary = hero.secondaryCta ?? { label: "Merchant onboarding", href: "#merchant-onboarding" };
+  const categoriesTitle = surface.categories?.title ?? "Categories";
+  const categoriesBody = surface.categories?.body ?? "Each category is its own discovery lens with a dedicated skill, country index, and merchant handoff.";
+  const categoriesEmpty = surface.categories?.emptyMessage ?? "No categories are available yet.";
+  const onboardingTitle = merchantOnboarding.title ?? "Own a Shopify store?";
+  const onboardingBody = merchantOnboarding.body ?? "Install the Shopify app to create or manage your merchant listing, then come back when you want buyers and agents to discover it from the directory.";
+  const onboardingCtaLabel = merchantOnboarding.ctaLabel ?? "Install the Shopify app";
+  const onboardingCtaHref = merchantOnboarding.ctaHref ?? "https://apps.shopify.com/store-agent-kit";
+  const onboardingNote = merchantOnboarding.note ?? "Merchant onboarding stays at the bottom so discovery remains the primary experience.";
+  const onboardingBullets = merchantOnboarding.bullets ?? [
+    "Create a merchant listing from the app.",
+    "Keep your Shopify store connected for future discovery.",
+    "Use the directory as the public storefront for agent shoppers."
+  ];
+
+  const categoryMarkup = categoryCards.length === 0
+    ? `<p class="surface-empty">${escapeHtml(categoriesEmpty)}</p>`
+    : categoryCards.map((category) => {
+        const cardSummary = category.summary ?? "";
+        const cardSubtitle = category.subtitle?.trim() || cardSummary;
+        const cardBadge = category.badge ?? "open skill";
+        const cardEyebrow = category.eyebrow ?? category.name?.toLowerCase() ?? category.slug;
+        const mascotUrl = category.mascotUrl ?? "/assets/mascots/lobsterbazaar-default.jpg";
+        const href = category.href ?? `/${category.slug}/skill.md`;
+
+        return `
+          <a class="surface-category-card" href="${escapeHtml(href)}">
+            <span class="surface-category-card__art">
+              <img src="${escapeHtml(mascotUrl)}" alt="${escapeHtml(category.name ?? category.slug)} mascot">
+            </span>
+            <span class="surface-category-card__body">
+              <span class="surface-category-card__eyebrow">${escapeHtml(cardEyebrow)}</span>
+              <strong>${escapeHtml(category.name ?? category.slug)}</strong>
+              <span class="surface-category-card__subtitle">${escapeHtml(cardSubtitle)}</span>
+            </span>
+            <span class="surface-category-card__action">
+              <span>${escapeHtml(cardBadge)}</span>
+              <span>${escapeHtml(category.actionLabel ?? "Open skill")}</span>
+            </span>
+          </a>
+        `;
+      }).join("");
+
+  const featuredMarkup = sections.has("featured") && featuredList.length > 0
+    ? `
+      <section class="surface-panel" id="featured">
+        <div class="surface-section-heading">
+          <div>
+            <p class="surface-kicker">featured merchants</p>
+            <h2>${escapeHtml(surface.featured?.title ?? "A few shops worth opening first.")}</h2>
+          </div>
+          <p>${escapeHtml(surface.featured?.body ?? "Use these merchants when the agent needs a trusted starting point.")}</p>
+        </div>
+        <div class="surface-featured-grid">
+          ${renderFeaturedMerchantCards(featuredList)}
+        </div>
+      </section>
+    `
+    : "";
+
+  const networkMarkup = sections.has("network") && networkEntries.length > 0
+    ? `
+      <section class="surface-panel" id="network">
+        <div class="surface-section-heading">
+          <div>
+            <p class="surface-kicker">network</p>
+            <h2>${escapeHtml(surface.network?.title ?? "The current Lobster network")}</h2>
+          </div>
+          <p>${escapeHtml(surface.network?.body ?? "These are the sibling deploys and brand entry points currently published alongside the directory.")}</p>
+        </div>
+        <div class="surface-network-grid">
+          ${networkEntries.map((entry) => `
+            <a class="surface-network-card" href="${escapeHtml(entry.href)}">
+              <span class="surface-network-card__emoji">${escapeHtml(entry.emoji ?? "🦞")}</span>
+              <span class="surface-network-card__body">
+                <strong>${escapeHtml(entry.brandName)}</strong>
+                <span>${escapeHtml(entry.subtitle ?? "")}</span>
+              </span>
+              <span class="surface-network-card__href">${escapeHtml(entry.href)}</span>
+            </a>
+          `).join("")}
+        </div>
+      </section>
+    `
+    : "";
+
+  const onboardingMarkup = sections.has("merchant_onboarding")
+    ? `
+      <section class="surface-panel surface-onboarding" id="merchant-onboarding">
+        <div class="surface-section-heading">
+          <div>
+            <p class="surface-kicker">merchant onboarding</p>
+            <h2>${escapeHtml(onboardingTitle)}</h2>
+          </div>
+          <p>${escapeHtml(onboardingBody)}</p>
+        </div>
+        <div class="surface-onboarding__content">
+          <a class="surface-onboarding__cta" href="${escapeHtml(onboardingCtaHref)}">${escapeHtml(onboardingCtaLabel)}</a>
+          <p class="surface-onboarding__note">${escapeHtml(onboardingNote)}</p>
+          <ul class="surface-onboarding__bullets">
+            ${onboardingBullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}
+          </ul>
+        </div>
+      </section>
+    `
+    : "";
+
+  const heroMarkup = sections.has("hero")
+    ? `
+      <section class="surface-hero">
+        <div class="surface-hero__copy">
+          <p class="surface-kicker">${escapeHtml(heroEyebrow)}</p>
+          <h1>${escapeHtml(heroTitle)}</h1>
+          <p class="surface-hero__body">${escapeHtml(heroBody)}</p>
+          <div class="surface-hero__ctas">
+            <a class="surface-hero__cta surface-hero__cta--primary" href="${escapeHtml(heroPrimary.href)}">${escapeHtml(heroPrimary.label)}</a>
+            <a class="surface-hero__cta surface-hero__cta--secondary" href="${escapeHtml(heroSecondary.href)}">${escapeHtml(heroSecondary.label)}</a>
+          </div>
+          <div class="surface-quick-links">
+            <a href="${escapeHtml(skillUrl)}">Root skill</a>
+            <a href="${escapeHtml(categoriesUrl)}">Category index</a>
+          </div>
+        </div>
+        <div class="surface-hero__panel">
+          <div class="surface-hero__panel-inner">
+            <div>
+              <p class="surface-kicker">directory surface</p>
+              <h2>${escapeHtml(categoriesTitle)}</h2>
+              <p>${escapeHtml(categoriesBody)}</p>
+            </div>
+            <div class="surface-hero__stats">
+              <span>${escapeHtml(String(categories.length))} categories</span>
+              <span>${escapeHtml(String(config.directoryVerticals.length))} network entries</span>
+              <span>single-instance directory</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    `
+    : "";
+
+  const categoriesMarkup = sections.has("categories")
+    ? `
+      <section class="surface-panel surface-categories" id="categories">
+        <div class="surface-section-heading">
+          <div>
+            <p class="surface-kicker">categories</p>
+            <h2>${escapeHtml(categoriesTitle)}</h2>
+          </div>
+          <p>${escapeHtml(categoriesBody)}</p>
+        </div>
+        <div class="surface-category-grid">
+          ${categoryMarkup}
+        </div>
+      </section>
+    `
+    : "";
+
+  const sectionMarkup = sectionOrder.map((section) => {
+    if (section === "hero") {
+      return heroMarkup;
+    }
+
+    if (section === "categories") {
+      return categoriesMarkup;
+    }
+
+    if (section === "featured") {
+      return featuredMarkup;
+    }
+
+    if (section === "network") {
+      return networkMarkup;
+    }
+
+    if (section === "merchant_onboarding") {
+      return onboardingMarkup;
+    }
+
+    return "";
+  }).join("");
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escapeHtml(config.brandName)}</title>
+    <style>
+      :root {
+        color-scheme: dark light;
+        --bg: #12110f;
+        --bg-soft: rgba(202, 165, 104, 0.12);
+        --panel: rgba(20, 18, 16, 0.88);
+        --panel-strong: #1d1a16;
+        --ink: #f5f0e6;
+        --muted: #b6ab9b;
+        --line: rgba(255, 255, 255, 0.1);
+        --accent: #e8c48b;
+        --accent-strong: #ffdfb4;
+        --shadow: 0 32px 80px rgba(0, 0, 0, 0.34);
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f3ede1;
+          --bg-soft: rgba(184, 131, 58, 0.1);
+          --panel: rgba(255, 252, 247, 0.92);
+          --panel-strong: #fffaf1;
+          --ink: #1d1711;
+          --muted: #675c52;
+          --line: rgba(34, 28, 22, 0.12);
+          --accent: #9a6b30;
+          --accent-strong: #5d3e1a;
+          --shadow: 0 24px 64px rgba(80, 57, 29, 0.1);
+        }
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top, var(--bg-soft), transparent 28%),
+          linear-gradient(180deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 85%, #000 15%) 100%);
+        color: var(--ink);
+        font-family: "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+      a { color: inherit; }
+      main {
+        width: min(1120px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 24px 0 56px;
+        display: grid;
+        gap: 18px;
+      }
+      .surface-hero,
+      .surface-panel {
+        border: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(14px);
+      }
+      .surface-hero {
+        display: grid;
+        gap: 18px;
+        padding: 22px;
+        border-radius: 28px;
+      }
+      @media (min-width: 920px) {
+        .surface-hero {
+          grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+          align-items: stretch;
+        }
+      }
+      .surface-hero__copy,
+      .surface-hero__panel-inner,
+      .surface-panel {
+        min-width: 0;
+      }
+      .surface-hero__copy {
+        display: grid;
+        gap: 16px;
+        padding: 4px;
+      }
+      .surface-hero__copy h1,
+      .surface-section-heading h2 {
+        margin: 0;
+        line-height: 1.02;
+        letter-spacing: -0.03em;
+      }
+      .surface-hero__copy h1 {
+        font-size: clamp(2.25rem, 4vw, 4.8rem);
+        max-width: 12ch;
+      }
+      .surface-kicker {
+        margin: 0;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 0.76rem;
+      }
+      .surface-hero__body,
+      .surface-section-heading p,
+      .surface-onboarding__note {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+      .surface-hero__ctas {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .surface-hero__cta,
+      .surface-onboarding__cta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px 16px;
+        border-radius: 999px;
+        text-decoration: none;
+        border: 1px solid var(--line);
+        transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+      }
+      .surface-hero__cta:hover,
+      .surface-onboarding__cta:hover,
+      .surface-category-card:hover,
+      .surface-network-card:hover,
+      .surface-featured-card:hover {
+        transform: translateY(-1px);
+      }
+      .surface-hero__cta--primary,
+      .surface-onboarding__cta {
+        background: var(--accent);
+        color: #20160d;
+        border-color: transparent;
+      }
+      .surface-hero__cta--secondary {
+        background: rgba(255,255,255,0.03);
+      }
+      .surface-quick-links {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        color: var(--muted);
+      }
+      .surface-quick-links a {
+        text-decoration: none;
+        border-bottom: 1px solid transparent;
+      }
+      .surface-quick-links a:hover {
+        border-color: currentColor;
+      }
+      .surface-hero__panel {
+        border-radius: 22px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        background:
+          radial-gradient(circle at top right, rgba(255, 223, 180, 0.22), transparent 38%),
+          linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      }
+      .surface-hero__panel-inner {
+        display: grid;
+        gap: 20px;
+        padding: 18px;
+      }
+      .surface-hero__panel-inner h2 {
+        margin: 8px 0 10px;
+        font-size: clamp(1.4rem, 2.3vw, 2rem);
+      }
+      .surface-hero__stats {
+        display: grid;
+        gap: 10px;
+        margin-top: auto;
+      }
+      .surface-hero__stats span,
+      .surface-category-card__action span:last-child,
+      .surface-network-card__href {
+        color: var(--muted);
+      }
+      .surface-panel {
+        border-radius: 24px;
+        padding: 20px;
+      }
+      .surface-section-heading {
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        align-items: end;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+      }
+      .surface-section-heading h2 {
+        font-size: clamp(1.4rem, 2vw, 2.2rem);
+      }
+      .surface-category-grid,
+      .surface-network-grid,
+      .surface-featured-grid {
+        display: grid;
+        gap: 12px;
+      }
+      @media (min-width: 760px) {
+        .surface-category-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .surface-network-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .surface-featured-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (min-width: 1080px) {
+        .surface-category-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .surface-network-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      .surface-category-card,
+      .surface-network-card,
+      .surface-featured-card {
+        color: inherit;
+        text-decoration: none;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: var(--panel-strong);
+        overflow: hidden;
+      }
+      .surface-category-card {
+        display: grid;
+        gap: 14px;
+        padding: 14px;
+        grid-template-rows: auto 1fr auto;
+      }
+      .surface-category-card__art {
+        aspect-ratio: 16 / 10;
+        border-radius: 16px;
+        overflow: hidden;
+        background: rgba(255,255,255,0.04);
+      }
+      .surface-category-card__art img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .surface-category-card__body {
+        display: grid;
+        gap: 8px;
+      }
+      .surface-category-card__body strong {
+        font-size: 1.08rem;
+      }
+      .surface-category-card__eyebrow,
+      .surface-category-card__subtitle {
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      .surface-category-card__eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 0.74rem;
+      }
+      .surface-category-card__action {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+      }
+      .surface-category-card__action span:first-child {
+        color: var(--accent);
+      }
+      .surface-network-card {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 12px;
+        padding: 14px;
+        align-items: center;
+      }
+      .surface-network-card__emoji {
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        border-radius: 14px;
+        background: rgba(255,255,255,0.04);
+      }
+      .surface-network-card__body {
+        display: grid;
+        gap: 4px;
+      }
+      .surface-network-card__body span {
+        color: var(--muted);
+      }
+      .surface-network-card__href {
+        grid-column: 1 / -1;
+        font-size: 0.84rem;
+      }
+      .surface-onboarding {
+        display: grid;
+        gap: 18px;
+      }
+      .surface-onboarding__content {
+        display: grid;
+        gap: 14px;
+        padding-top: 4px;
+      }
+      .surface-onboarding__bullets {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--muted);
+        display: grid;
+        gap: 8px;
+      }
+      .surface-empty {
+        margin: 0;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      ${sectionMarkup}
     </main>
   </body>
 </html>`;

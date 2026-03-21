@@ -19,11 +19,15 @@ interface SkillArtifactBaseInput {
   registerPath: string;
 }
 
-function buildCategoryDirectoryEntry(category: Pick<Category, "slug" | "name" | "summary">): CategoryDirectoryEntry {
+function buildCategoryDirectoryEntry(
+  category: Pick<Category, "slug" | "name" | "summary" | "subtitle" | "mascotUrl">
+): CategoryDirectoryEntry {
   return {
     slug: category.slug,
     name: category.name,
     summary: category.summary,
+    subtitle: category.subtitle,
+    mascotUrl: category.mascotUrl,
     skillPath: `/${category.slug}/skill.md`,
     countriesPath: `/${category.slug}/countries`
   };

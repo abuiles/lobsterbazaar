@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { createApp } from "../src/app";
+import { MemoryArtifactStore, MemoryRepositories } from "../src/memory";
 import { createTestHarness, requestJson, requestText, RecordingMetricsDataset } from "./helpers";
-import { MemoryRepositories } from "../src/memory";
 
 interface ErrorResponse {
   error: {
@@ -101,6 +102,19 @@ function lastMetricWrite(metrics: { writes: AnalyticsEngineDataPoint[] }): Analy
   return metric as AnalyticsEngineDataPoint;
 }
 
+class RootSurfaceRepositories extends MemoryRepositories {
+  override async listCategories() {
+    const categories = await super.listCategories();
+    return categories.map((category) => ({
+      ...category,
+      subtitle: category.slug === "coffee" ? "coffee, roasters, cafes" : "bread, bakeries, pastries",
+      mascotUrl: category.slug === "coffee"
+        ? "/assets/mascots/lobsterbrew-mascot.jpg"
+        : "/assets/mascots/lobsterbread-mascot-v2.jpg"
+    }));
+  }
+}
+
 describe("lobsterbazaar worker", () => {
   it("renders the landing page with root category guidance", async () => {
     const { app } = await createTestHarness();
@@ -121,6 +135,110 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("Featured Merchants");
     expect(body).toContain("Sample Roaster");
     expect(body).toContain("source code on GitHub");
+  });
+
+  it("renders a deploy-specific root surface with category mascots and merchant onboarding", async () => {
+    const artifacts = new MemoryArtifactStore();
+    const repositories = new RootSurfaceRepositories();
+
+    await repositories.putCategory({
+      slug: "coffee",
+      name: "Coffee",
+      summary: "Coffee-oriented merchant discovery for lobsters."
+    });
+
+    await repositories.putCategory({
+      slug: "bread",
+      name: "Bread",
+      summary: "Bread-oriented merchant discovery for lobsters."
+    });
+
+    const app = createApp({
+      artifacts,
+      repositories,
+      config: {
+        brandName: "Lobster Stores",
+        deployId: "lobsterstores",
+        deployDomain: "lobsterstores.com",
+        verticalId: "directory",
+        verticalSummary: "Category-first merchant discovery for OpenClaw and AI shoppers.",
+        skillBuyingTargets: "coffee, bread, and related Shopify merchants",
+        mascotUrl: "/assets/mascots/lobsterbazaar-default.jpg",
+        emoji: "🦞",
+        directoryVerticals: [
+          {
+            deployId: "lobsterbrew",
+            brandName: "Lobster Brew",
+            domain: "lobsterbrew.com",
+            url: "https://lobsterbrew.com",
+            verticalName: "Coffee",
+            directorySubtitle: "coffee, roasters, cafes",
+            emoji: "🦞☕️"
+          },
+          {
+            deployId: "lobsterbread",
+            brandName: "Lobster Bread",
+            domain: "lobsterbread.com",
+            url: "https://lobsterbread.com",
+            verticalName: "Bread",
+            directorySubtitle: "bread, bakeries, pastries",
+            emoji: "🦞🥐"
+          }
+        ],
+        rootSurface: {
+          sectionOrder: ["hero", "categories", "network", "merchant_onboarding"],
+          hero: {
+            eyebrow: "discovery for OpenClaw and AI shoppers",
+            title: "Help OpenClaw discover the right Shopify store.",
+            body: "Lobster Stores is a category-first directory. Start with a category, stay in that namespace, and keep merchant onboarding secondary.",
+            primaryCta: {
+              label: "Browse categories",
+              href: "#categories"
+            },
+            secondaryCta: {
+              label: "Merchant onboarding",
+              href: "#merchant-onboarding"
+            }
+          },
+          categories: {
+            title: "Categories",
+            body: "Every category gets its own skill and merchant discovery lane."
+          },
+          categoryOrder: ["coffee", "bread"],
+          merchantOnboarding: {
+            title: "Own a Shopify store?",
+            body: "Install the Shopify app to create or manage your merchant listing.",
+            ctaLabel: "Install the Shopify app",
+            ctaHref: "https://apps.shopify.com/store-agent-kit",
+            note: "Merchant onboarding stays at the bottom so discovery remains primary.",
+            bullets: [
+              "Create a merchant listing from the app.",
+              "Keep your Shopify store connected for future discovery."
+            ]
+          }
+        }
+      } as any,
+      metrics: new RecordingMetricsDataset() as unknown as AnalyticsEngineDataset,
+      operatorToken: "test-operator-token",
+      now: () => "2026-03-15T12:00:00Z"
+    });
+
+    const response = await app.fetch(new Request("https://lobsterstores.com/"));
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).toContain("Help OpenClaw discover the right Shopify store.");
+    expect(body).toContain("Browse categories");
+    expect(body).toContain("Merchant onboarding");
+    expect(body).toContain("Own a Shopify store?");
+    expect(body).toContain("Install the Shopify app");
+    expect(body).toContain("/assets/mascots/lobsterbrew-mascot.jpg");
+    expect(body).toContain("/assets/mascots/lobsterbread-mascot-v2.jpg");
+    expect(body).toContain("coffee, roasters, cafes");
+    expect(body).toContain("bread, bakeries, pastries");
+    expect(body).toContain("Lobster Brew");
+    expect(body).toContain("Lobster Bread");
+    expect(body).not.toContain("verified listing");
   });
 
   it("serves the root skill markdown as the category entrypoint", async () => {

@@ -211,7 +211,15 @@ describe("deploy package loading", () => {
           ["deploy/config.json", JSON.stringify(createDeployConfig({
             vertical_id: undefined,
             vertical_name: undefined,
-            vertical_summary: undefined
+            vertical_summary: undefined,
+            root_surface: {
+              sectionOrder: ["hero", "categories", "merchant_onboarding"],
+              merchantOnboarding: {
+                title: "Own a Shopify store?",
+                ctaLabel: "Install the Shopify app",
+                ctaHref: "https://apps.shopify.com/store-agent-kit"
+              }
+            }
           }))],
           [
             "deploy/categories.json",
@@ -219,7 +227,9 @@ describe("deploy package loading", () => {
               {
                 slug: "bread",
                 name: "Bread",
-                summary: "Bread directory"
+                summary: "Bread directory",
+                subtitle: "bread, bakeries, pastries",
+                mascot_url: "/assets/mascots/lobsterbread-mascot-v2.jpg"
               },
               {
                 slug: "coffee",
@@ -242,9 +252,12 @@ describe("deploy package loading", () => {
     );
 
     expect(deployPackage.categories.map((category) => category.slug)).toEqual(["bread", "coffee"]);
+    expect(deployPackage.categories[0]?.subtitle).toBe("bread, bakeries, pastries");
+    expect(deployPackage.categories[0]?.mascotUrl).toBe("/assets/mascots/lobsterbread-mascot-v2.jpg");
     expect(deployPackage.categories[1]?.skillBuyingTargets).toBe("coffee beans and brewing gear");
     expect(deployPackage.merchants[0]?.categorySlugs).toEqual(["coffee", "bread"]);
     expect(deployPackage.config.directorySummary).toBe("Coffee directory");
+    expect(deployPackage.config.rootSurface?.merchantOnboarding?.ctaHref).toBe("https://apps.shopify.com/store-agent-kit");
   });
 
   it("rejects merchants that reference unknown categories", async () => {

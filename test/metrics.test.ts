@@ -27,7 +27,8 @@ describe("metrics helpers", () => {
 
     expect(categorySkillMetric).toEqual({
       eventName: "skill_view",
-      routeId: "/coffee/skill",
+      routeId: "/:category/skill",
+      categorySlug: "coffee",
       method: "GET"
     });
 
@@ -40,7 +41,8 @@ describe("metrics helpers", () => {
 
     expect(categoryCountryMetric).toEqual({
       eventName: "country_view",
-      routeId: "/coffee/countries/:country_code",
+      routeId: "/:category/countries/:country_code",
+      categorySlug: "coffee",
       countryCode: "US",
       method: "GET"
     });
@@ -54,10 +56,46 @@ describe("metrics helpers", () => {
 
     expect(categoryConnectMetric).toEqual({
       eventName: "merchant_connect_view",
-      routeId: "/bread/merchants/:slug/connect",
+      routeId: "/:category/merchants/:slug/connect",
+      categorySlug: "bread",
       merchantSlug: "claimed-roaster",
       method: "GET"
     });
+  });
+
+  it("uses category slug as the metric scope when available", () => {
+    const dataset = new RecordingMetricsDataset();
+
+    recordRequestMetric({
+      dataset: dataset as unknown as AnalyticsEngineDataset,
+      config: {
+        deployId: "lobsterbrew",
+        verticalId: "directory"
+      },
+      metric: {
+        eventName: "offers_view",
+        routeId: "/:category/offers/:country_code",
+        categorySlug: "coffee",
+        countryCode: "US",
+        method: "GET"
+      },
+      response: new Response(null, { status: 200 }),
+      durationMs: 8
+    });
+
+    expect(dataset.writes[0]?.blobs).toEqual([
+      "offers_view",
+      "lobsterbrew",
+      "coffee",
+      "/:category/offers/:country_code",
+      "GET",
+      "ok",
+      "2xx",
+      "",
+      "",
+      "US"
+    ]);
+    expect(dataset.writes[0]?.indexes).toEqual(["coffee"]);
   });
 
   it("parses register request context and uses vertical_id as the index", async () => {

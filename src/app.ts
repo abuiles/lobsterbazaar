@@ -911,32 +911,29 @@ function renderRootSurfaceLandingPage(
   const featuredList = featuredMerchants.slice(0, featuredMax);
   const sectionOrder = readSectionOrder(surface);
   const sections = new Set(sectionOrder);
-  const heroTitle = hero.title ?? "Discover Shopify stores by category.";
-  const heroBody = hero.body ?? "Lobster Stores helps OpenClaw and other AI shoppers browse Shopify merchants by category, move through one discovery lane at a time, and hand off to merchant checkout when the fit is clear.";
-  const heroEyebrow = hero.eyebrow ?? "discovery for OpenClaw and AI shoppers";
+  const heroTitle = hero.title ?? `Discover merchants with ${config.brandName}.`;
+  const heroBody = hero.body ?? "Use this directory to browse merchants by category, stay inside one discovery lane at a time, and hand off to merchant checkout when the fit is clear.";
+  const heroEyebrow = hero.eyebrow ?? "merchant discovery directory";
   const heroPrimary = hero.primaryCta ?? { label: "> install the skill", href: "#install" };
-  const heroSecondary = hero.secondaryCta ?? { label: "> browse merchants", href: "#directory" };
-  const heroTertiary = hero.tertiaryCta ?? { label: "> register your store", href: "#register" };
+  const heroSecondary = hero.secondaryCta ?? { label: "> browse directory", href: "#directory" };
+  const heroTertiary = hero.tertiaryCta ?? { label: "> merchant onboarding", href: "#register" };
   const categoriesTitle = surface.categories?.title ?? "Categories";
   const categoriesBody = surface.categories?.body ?? "Start with a category, open its skill, then browse countries, merchants, and connect prompts inside that lane.";
   const categoriesEmpty = surface.categories?.emptyMessage ?? "No categories are available yet.";
   const onboardingTitle = merchantOnboarding.title ?? "Merchant onboarding";
-  const onboardingBody = merchantOnboarding.body ?? "Install the Shopify app to create your listing.";
-  const onboardingCtaLabel = merchantOnboarding.ctaLabel ?? "Install Lobster Stores from the Shopify App Store";
+  const onboardingBody = merchantOnboarding.body ?? "Install the Shopify app to create or manage your listing.";
+  const onboardingCtaLabel = merchantOnboarding.ctaLabel ?? "Install the Shopify app";
   const onboardingCtaHref = merchantOnboarding.ctaHref ?? "https://apps.shopify.com/store-agent-kit";
   const onboardingNote = merchantOnboarding.note ?? "Merchant setup lives below the directory so discovery stays first.";
   const onboardingBullets = merchantOnboarding.bullets ?? [
     "Create your merchant listing in the app after installation.",
-    "Request verification for an existing listing from the app.",
-    "Share your Shopify store URL, category, merchant details, and what makes your business a fit inside the app.",
-    "Verification helps OpenClaw agents and AI shoppers trust your listing faster."
+    "Keep your listing details current in the app.",
+    "Share your store URL, category, and merchant details.",
+    "Use merchant onboarding as the secondary flow after discovery."
   ];
-  const onboardingSupportLinks = merchantOnboarding.supportLinks ?? [
-    { label: "source code on GitHub", href: "https://github.com/abuiles/lobsterbazaar" },
-    { label: "built by @abuiles", href: "https://x.com/abuiles" }
-  ];
-  const onboardingFooterLines = merchantOnboarding.footerLines ?? ["made for claws, shoppers, and merchants"];
-  const installInstruction = `Read ${skillUrl} and use it to browse the Lobster Stores directory of Shopify merchants by category. Help shoppers discover merchants, compare stores, and connect to the right Shopify storefront.`;
+  const onboardingSupportLinks = merchantOnboarding.supportLinks ?? [];
+  const onboardingFooterLines = merchantOnboarding.footerLines ?? [];
+  const installInstruction = `Read ${skillUrl} and use it to browse the directory of merchants by category. Help owners discover merchants, compare stores, and connect to the right storefront.`;
   const networkEntries = surface.network?.entries ?? config.directoryVerticals.map((entry) => ({
     brandName: entry.brandName,
     href: entry.url,
@@ -1052,8 +1049,8 @@ function renderRootSurfaceLandingPage(
         <div class="install-grid">
           <div class="install-lead">
             <p class="surface-kicker">install</p>
-            <h2>Send your agent to Lobster Stores.</h2>
-            <p class="install-copy">Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL and follow instructions. Start with the directory skill to discover Shopify stores by category, understand what they sell, and choose the right merchant lane.</p>
+            <h2>Send your agent to ${escapeHtml(config.brandName)}.</h2>
+            <p class="install-copy">Works with any agent that can read a URL and follow instructions. Start with the directory skill to discover merchants by category, understand what they sell, and choose the right lane.</p>
           </div>
           <article class="install-card">
             <div class="prompt">
@@ -1086,7 +1083,7 @@ function renderRootSurfaceLandingPage(
           <div class="surface-hero__panel-inner">
             <div>
               <p class="surface-kicker">discovery flow</p>
-              <h2>Discover Shopify stores across the lobster map.</h2>
+              <h2>Discover merchants across the directory.</h2>
               <p>Use the root to pick a category, then let your agent browse countries, merchants, and connect prompts without losing context.</p>
             </div>
             <ol class="surface-flow-list">
@@ -1111,7 +1108,7 @@ function renderRootSurfaceLandingPage(
         <div class="surface-section-heading">
           <div>
             <p class="surface-kicker">directory</p>
-            <h2>Discover Shopify stores by category.</h2>
+            <h2>${escapeHtml(categoriesTitle)}</h2>
           </div>
           <p>${escapeHtml(categoriesBody)}</p>
         </div>
@@ -1151,7 +1148,7 @@ function renderRootSurfaceLandingPage(
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>${escapeHtml(config.brandName)}: Discover Shopify stores by category</title>
+    <title>${escapeHtml(config.brandName)}: Discover merchants by category</title>
     <meta name="color-scheme" content="dark light">
     <meta name="description" content="${escapeHtml(heroBody)}">
     <style>
@@ -1654,7 +1651,7 @@ function renderRootSurfaceLandingPage(
         const button = document.querySelector("[data-theme-toggle]");
         const copyButton = document.querySelector("[data-copy-install]");
         const installInstruction = document.querySelector("[data-install-instruction]");
-        const storageKey = "lobster-stores-theme";
+        const storageKey = "${escapeHtml(config.deployId)}-theme";
         const savedTheme = localStorage.getItem(storageKey);
         const syncButtonLabel = () => {
           if (!button) {

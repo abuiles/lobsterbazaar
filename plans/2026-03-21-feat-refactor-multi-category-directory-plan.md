@@ -28,7 +28,7 @@ Merchant truth remains canonical and shared across the instance, while category 
 - [x] Phase 1: Contract and schema refactor
 - [x] Phase 2: Repository and artifact generation refactor
 - [x] Phase 3: HTTP routing and presentation surface
-- [ ] Phase 4: Metrics, docs, tooling, and tests
+- [x] Phase 4: Metrics, docs, tooling, and tests
 
 ## Problem Statement / Motivation
 
@@ -254,8 +254,8 @@ Acceptance gate:
 - [x] Root aggregated country discovery is not introduced as a first-class V1 surface.
 - [x] Artifact materialization supports multiple categories within one instance.
 - [x] SQL generation, import, and in-memory repositories remain deterministic under the new category model.
-- [ ] Metrics and tests are updated to reflect the category-aware contract.
-- [ ] README and example deploy data document the new root-plus-category installation flow.
+- [x] Metrics and tests are updated to reflect the category-aware contract.
+- [x] README and example deploy data document the new root-plus-category installation flow.
 
 ## Risks and Mitigations
 

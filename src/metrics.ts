@@ -277,7 +277,7 @@ export function recordRequestMetric({
   }
 
   const eventName = resolveEventName(metric, response);
-  const metricScope = metric.categorySlug ?? config.verticalId || config.deployId;
+  const metricScope = metric.categorySlug ?? config.verticalId ?? config.deployId;
   dataset.writeDataPoint({
     blobs: [
       eventName,

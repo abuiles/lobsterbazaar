@@ -19,6 +19,19 @@ This document combines the V0 architecture docs in `lobsterbazaar/specs/` into o
 - [Agent Bootstrap Skill V0](#agent-bootstrap-skill-v0)
 - [API Contracts V0](#api-contracts-v0)
 
+## Current Public Contract
+
+The active direction for `lobsterbazaar` is one instance with explicit flat categories.
+
+At the public surface, that means:
+
+- root `/` introduces categories
+- `/skill.md` points agents at categories
+- `/{category}/skill.md` is the canonical bootstrap surface for a category
+- `/{category}/countries/{country_code}`, `/{category}/offers/{country_code}`, and `/{category}/merchants/{slug}/connect` are the canonical discovery and handoff routes
+- `/claws/register` exists for compatibility, but discovery does not require it
+- merchants can belong to multiple categories
+
 # LobsterBazaar System Map V0
 
 ## Product Boundary
@@ -57,7 +70,7 @@ The coffee vertical is:
 
 The coffee vertical is not the engine itself.
 
-That distinction matters because the reusable abstractions should live in `lobsterbazaar`, while vertical-specific language and schemas should live in the deploy layer.
+That distinction matters because the reusable abstractions should live in `lobsterbazaar`, while category-specific language and schemas should live in the deploy layer.
 
 The claw can discover, reason, and build carts.
 The human owner still completes payment in Shopify checkout.
@@ -700,33 +713,30 @@ The final checkout URL and related metadata.
 The leanest useful public-facing directory API is:
 
 ```text
-/{vertical}/countries
-/{vertical}/countries/{country_code}
-/{vertical}/merchants/{slug}
-/{vertical}/merchants/{slug}/connect
-/{vertical}/offers
-/{vertical}/offers/{country_code}
+/skill.md
+/categories
+/categories.md
+/{category}/skill.md
+/{category}/countries
+/{category}/countries/{country_code}
+/{category}/merchants/{slug}
+/{category}/merchants/{slug}/connect
+/{category}/offers/{country_code}
 ```
 
 Possible responses:
 
-- `/coffee/countries/us` -> returns US roasters
+- `/skill.md` -> root category bootstrap instructions
+- `/categories.md` -> list of categories
+- `/coffee/countries/us` -> returns US merchants in the coffee category
 - `/coffee/merchants/200-degs` -> returns merchant record
 - `/coffee/merchants/200-degs/connect` -> returns Storefront MCP endpoint and connection notes
-- `/coffee/offers/us` -> returns active US offers
-- `/coffee/offers/co` -> returns active Colombia offers
+- `/coffee/offers/us` -> returns active US offers in the coffee category
+- `/coffee/offers/co` -> returns active Colombia offers in the coffee category
 
 This could be served by one Worker in front of R2 and D1.
 
-If you want even less URL nesting in V0, you can still implement it internally as vertical-aware and expose:
-
-```text
-/countries/{country_code}
-/roasters/{slug}
-/offers/{country_code}
-```
-
-for the coffee product first, while keeping the internal data model ready for multiple verticals.
+There is no root aggregated `/countries/{country_code}` discovery surface in V1.
 
 ## LLM Discoverability Strategy
 
@@ -827,13 +837,13 @@ Offers can rank first in directory discovery, but the lobster still decides what
 If the goal is the leanest possible usable system, the first slice should be:
 
 1. CSV import
-2. Vertical-aware country indexes generated from CSV
+2. Category-aware country indexes generated from CSV
 3. Merchant JSON + Markdown artifacts in R2
 4. One D1-backed control plane for claws, claims, and offers
 5. One Worker endpoint for directory queries and R2 refresh
 6. Storefront MCP handoff when a merchant is selected
-7. Country offer pages such as `/us` and `/co`
-8. one vertical frontend on top of `lobsterbazaar`
+7. Category country and offer pages such as `/coffee/countries/us` and `/coffee/offers/us`
+8. One instance with flat categories on top of `lobsterbazaar`
 
 That gets you:
 
@@ -850,7 +860,7 @@ The V0 architecture I recommend is:
 CSV -> normalize -> R2 directory files
                 -> D1 control plane
                 -> Worker directory API + R2 refresh
-                -> vertical-specific merchant selection
+                -> category-specific merchant selection
                 -> resolve merchant Storefront MCP endpoint
                 -> build cart + set lb_source__
                 -> Shopify checkout URL
@@ -1327,7 +1337,7 @@ The smallest durable engine model for `lobsterbazaar` is:
 Everything else can either:
 
 - stay derived in `R2`
-- remain vertical-specific
+- remain category-specific
 - or be added later once the core loop is validated
 
 # Bring Your Own Merchants Deploy Model
@@ -1554,6 +1564,8 @@ That is enough.
 }
 ```
 
+For the current category-first direction, deploy packages also need explicit category records and merchant-to-category membership.
+
 ## Risks
 
 - letting deploy owners extend the schema too early
@@ -1715,12 +1727,12 @@ flowchart LR
     E --> G[Offers-first discovery input]
 ```
 
-## Vertical metadata rule
+## Category metadata rule
 
 To keep the engine generic:
 
 - common fields stay top-level
-- vertical-specific fields go in `vertical_metadata`
+- category-specific fields go in `vertical_metadata`
 
 Example for coffee:
 
@@ -2049,10 +2061,12 @@ Mitigation:
 
 ### Engine surfaces
 
-- `/countries/{country_code}`
-- `/merchants/{slug}`
-- `/offers/{country_code}`
-- `/merchants/{slug}/connect`
+- `/skill.md`
+- `/categories.md`
+- `/{category}/countries/{country_code}`
+- `/{category}/merchants/{slug}`
+- `/{category}/offers/{country_code}`
+- `/{category}/merchants/{slug}/connect`
 
 ### Merchant surfaces
 
@@ -2148,9 +2162,8 @@ For agent-facing products, the lobster needs a stable remote bootstrap entrypoin
 The landing page tells the human what to paste into their lobster.
 The skill package tells the lobster how to:
 
-- register
-- save its key
-- discover merchants
+- choose a category
+- discover merchants within that category
 - resolve merchant MCP endpoints
 - attach `lb_source__={deploy_id}` to carts
 
@@ -2159,6 +2172,8 @@ The skill package tells the lobster how to:
 For a deploy, publish:
 
 - `/skill.md`
+- `/categories.md`
+- `/{category}/skill.md`
 
 That file should be generated by the deploy, not handwritten per site.
 
@@ -2167,11 +2182,11 @@ That file should be generated by the deploy, not handwritten per site.
 The skill should guide the lobster through this exact bootstrapping sequence:
 
 1. fetch `skill.md`
-2. register with `POST /claws/register`
-3. save the returned `claw_id` and `api_key` locally
-4. use `GET /countries/{country_code}` for discovery
-5. use `GET /offers/{country_code}` for offers-first ranking
-6. use `GET /merchants/{slug}/connect` to get the merchant MCP endpoint
+2. choose a category from the root index
+3. fetch `/{category}/skill.md`
+4. use `GET /{category}/countries/{country_code}` for discovery
+5. use `GET /{category}/offers/{country_code}` for offers-first ranking
+6. use `GET /{category}/merchants/{slug}/connect` to get the merchant MCP endpoint
 7. use the merchant's Storefront MCP to search catalog and build the cart
 8. attach cart attribute `lb_source__ = {deploy_id}`
 9. return the checkout URL to the owner
@@ -2209,15 +2224,15 @@ One short paragraph explaining:
 
 Tell the lobster to:
 
-- call `POST /claws/register`
-- save credentials locally
-- never assume the key will be shown again
+- use the root skill to choose a category first
+- switch to the category-specific skill before browsing merchants
+- do not require `POST /claws/register` for read-only discovery
 
 ### 4. Discovery workflow
 
 Tell the lobster to:
 
-- start with a country page or country API
+- start with a category page or category API
 - rank active offers first when relevant
 - narrow merchants before calling Storefront MCP
 
@@ -2225,7 +2240,7 @@ Tell the lobster to:
 
 Tell the lobster to:
 
-- call `/merchants/{slug}/connect`
+- call `/{category}/merchants/{slug}/connect`
 - get the merchant MCP URL
 - use Storefront MCP for catalog and cart operations
 
@@ -2272,7 +2287,7 @@ This file should hold the canonical template that deploys fill in.
 - `{deploy_id}`
 - `{deploy_domain}`
 - `{vertical_summary}`
-- `{register_path}`
+- `{categories_path}`
 - `{countries_path}`
 - `{offers_path}`
 - `{merchant_connect_path}`
@@ -2283,22 +2298,23 @@ This file should hold the canonical template that deploys fill in.
 Version: 0.1
 Base URL: https://{deploy_domain}
 
-You are installing access to {brand_name}, a vertical-specific discovery layer for lobsters.
-Use it to discover merchants, inspect active offers, resolve merchant Storefront MCP endpoints, and prepare carts for owner checkout.
+You are installing access to {brand_name}, a category-specific discovery layer for lobsters.
+Use it to choose a category, discover merchants, inspect active offers, resolve merchant Storefront MCP endpoints, and prepare carts for owner checkout.
 
 {vertical_summary}
 
 ## Install
 
-1. POST to `https://{deploy_domain}{register_path}`
-2. Save `claw_id` and `api_key` locally
-3. Do not lose the key
+1. Start with `https://{deploy_domain}{categories_path}`
+2. Choose a category
+3. Open the category skill and continue discovery there
 
 ## Discovery
 
-1. Start with `GET {countries_path}/{country_code}`
-2. Use `GET {offers_path}/{country_code}` to prioritize active offers
-3. Choose a merchant before using Storefront MCP
+1. Start with `GET {countries_path}`
+2. Use `GET {countries_path}/{country_code}` to shortlist merchants
+3. Use `GET {offers_path}/{country_code}` to prioritize active offers
+4. Choose a merchant before using Storefront MCP
 
 ## Merchant connect
 
@@ -2370,10 +2386,12 @@ For a deploy, these V0 surfaces are mandatory:
 
 - `/`
 - `/skill.md`
-- `/countries/{country_code}` or equivalent machine-readable route
-- `/offers/{country_code}`
-- `/merchants/{slug}/connect`
-- `POST /claws/register`
+- `/categories.md`
+- `/{category}/skill.md`
+- `/{category}/countries/{country_code}` or equivalent machine-readable route
+- `/{category}/offers/{country_code}`
+- `/{category}/merchants/{slug}/connect`
+- `POST /claws/register` for compatibility only
 
 ## Deploy generation rule
 
@@ -2385,7 +2403,7 @@ Inputs:
 - brand name
 - deploy domain
 - vertical name
-- registration endpoint
+- category index
 - discovery endpoints
 - cart attribution rule
 
@@ -2399,9 +2417,9 @@ The `lobsterbazaar` engine needs a remote bootstrap surface.
 
 For V0, that surface should be:
 
-- one `skill.md`
-- one registration call
-- one discovery workflow
+- one root `skill.md`
+- one category index
+- one category-specific discovery workflow
 - one merchant connect workflow
 - one explicit checkout boundary
 
@@ -2413,21 +2431,24 @@ The goal is not to design a large API.
 The goal is to lock the smallest surface needed for:
 
 - generated `skill.md`
-- country-based merchant discovery
+- category-based merchant discovery
 - offers-first ranking
 - merchant MCP handoff
-- lightweight claw registration
+- compatibility claw registration only
 
 ## Scope
 
-V0 defines four endpoints:
+V0 defines the following public endpoints:
 
-1. `POST /claws/register`
-2. `GET /countries/{country_code}`
-3. `GET /offers/{country_code}`
-4. `GET /merchants/{slug}/connect`
+1. `GET /skill.md`
+2. `GET /categories.md`
+3. `GET /{category}/skill.md`
+4. `GET /{category}/countries/{country_code}`
+5. `GET /{category}/offers/{country_code}`
+6. `GET /{category}/merchants/{slug}/connect`
+7. `POST /claws/register`
 
-If these four work well, the deploy is usable.
+If these public routes work well, the deploy is usable.
 
 ## Global rules
 
@@ -2442,9 +2463,9 @@ If these four work well, the deploy is usable.
 
 For V0:
 
-- `POST /claws/register` is public
+- `POST /claws/register` is public but optional for discovery
 - discovery endpoints are public
-- `GET /merchants/{slug}/connect` is public
+- `GET /{category}/merchants/{slug}/connect` is public
 
 Claws can still persist their `api_key` after registration, but V0 does not require bearer auth for these four endpoints.
 
@@ -2468,7 +2489,94 @@ Recommended error codes:
 - `conflict`
 - `internal_error`
 
-## 1. `POST /claws/register`
+## 1. `GET /skill.md`
+
+Returns the root bootstrap skill.
+
+### Purpose
+
+- introduce the category index
+- route the agent into a category-specific skill
+- keep discovery category-scoped
+
+### Status codes
+
+- `200 OK` on success
+
+## 2. `GET /categories.md`
+
+Returns the category index in Markdown form.
+
+### Purpose
+
+- let the agent choose a category first
+- present the available category entrypoints
+
+### Status codes
+
+- `200 OK` on success
+
+## 3. `GET /{category}/skill.md`
+
+Returns the category bootstrap skill.
+
+### Purpose
+
+- direct the agent through category-scoped discovery
+- connect the category skill to country, offer, and merchant handoff routes
+
+### Status codes
+
+- `200 OK` on success
+- `404 Not Found` if the category does not exist
+
+## 4. `GET /{category}/countries/{country_code}`
+
+Returns the merchant shortlist for a country inside a category.
+
+### Purpose
+
+- category-first discovery
+- merchant shortlist generation
+- offers-first directory surface
+
+### Status codes
+
+- `200 OK` on success
+- `404 Not Found` if the country is unsupported for that category
+
+## 5. `GET /{category}/offers/{country_code}`
+
+Returns active offers for a country inside a category.
+
+### Purpose
+
+- explicit offer discovery
+- offers-first ranking input
+- operator-reviewed merchant incentives
+
+### Status codes
+
+- `200 OK` on success
+- `404 Not Found` if the country is unsupported for that category
+
+## 6. `GET /{category}/merchants/{slug}/connect`
+
+Returns the MCP connection contract for a merchant within a category.
+
+### Purpose
+
+- turn category discovery into merchant shopping
+- hide MCP derivation details behind one route
+- return the cart attribution rule together with the endpoint
+
+### Status codes
+
+- `200 OK` on success
+- `404 Not Found` if merchant does not exist in that category
+- `409 Conflict` if merchant cannot currently be resolved
+
+## 7. `POST /claws/register`
 
 Registers a buyer claw or merchant claw.
 
@@ -2476,61 +2584,7 @@ Registers a buyer claw or merchant claw.
 
 - create a durable claw identity
 - return the one-time API key
-- support the generated `skill.md` install flow
-
-### Request
-
-```http
-POST /claws/register
-Content-Type: application/json
-```
-
-```json
-{
-  "role": "buyer",
-  "display_name": "my-lobster"
-}
-```
-
-### Request fields
-
-| Field | Required | Type | Notes |
-|---|---|---|---|
-| `role` | yes | string | `buyer` or `merchant` |
-| `display_name` | yes | string | Friendly claw name |
-| `description` | no | string | Optional short description |
-| `merchant_slug` | no | string | Required for merchant claws |
-
-### Validation rules
-
-- `role` must be `buyer` or `merchant`
-- `display_name` required
-- merchant claws must include `merchant_slug`
-- merchant claw registration should only succeed when operator-managed access exists
-
-### Response
-
-```json
-{
-  "claw": {
-    "claw_id": "claw_xxx",
-    "role": "buyer",
-    "display_name": "my-lobster",
-    "api_key": "deploy_xxx"
-  },
-  "important": "Save your API key. You may not see it again."
-}
-```
-
-### Response fields
-
-| Field | Type | Notes |
-|---|---|---|
-| `claw.claw_id` | string | Stable claw identifier |
-| `claw.role` | string | `buyer` or `merchant` |
-| `claw.display_name` | string | Echoed friendly name |
-| `claw.api_key` | string | Returned once |
-| `important` | string | Save-key warning |
+- support compatibility with older claw onboarding flows
 
 ### Status codes
 
@@ -2539,217 +2593,14 @@ Content-Type: application/json
 - `404 Not Found` if `merchant_slug` does not exist
 - `409 Conflict` if merchant registration is not allowed
 
-## 2. `GET /countries/{country_code}`
-
-Returns the merchant shortlist for a country.
-
-### Purpose
-
-- country-first discovery
-- merchant shortlist generation
-- offers-first directory surface
-
-### Request
-
-```http
-GET /countries/US
-```
-
-### Response
-
-```json
-{
-  "country_code": "US",
-  "generated_at": "2026-03-15T23:00:00Z",
-  "merchants": [
-    {
-      "slug": "sample-roaster",
-      "display_name": "Sample Roaster",
-      "store_url": "https://sample-roaster.com",
-      "notes": "Known for fruity washed coffees.",
-      "claim_status": "unclaimed",
-      "active_offers_count": 1
-    }
-  ]
-}
-```
-
-### Response fields
-
-| Field | Type | Notes |
-|---|---|---|
-| `country_code` | string | Requested country |
-| `generated_at` | timestamp | Artifact freshness hint |
-| `merchants` | array | Ranked merchant list |
-
-Each merchant item should include:
-
-| Field | Type | Notes |
-|---|---|---|
-| `slug` | string | Merchant ID in routes |
-| `display_name` | string | Public merchant name |
-| `store_url` | string | Canonical merchant URL |
-| `notes` | string | Short machine/human summary |
-| `claim_status` | string | Usually `unclaimed` or `claimed` |
-| `active_offers_count` | integer | Offers-first ranking signal |
-
-### Ranking rule
-
-For V0:
-
-1. merchants with active offers should rank first
-2. within each band, keep ordering simple and deterministic
-
-Do not add personalized ranking to this endpoint in V0.
-
-### Status codes
-
-- `200 OK` on success
-- `404 Not Found` if the country is unsupported
-
-## 3. `GET /offers/{country_code}`
-
-Returns active offers for a country.
-
-### Purpose
-
-- explicit offer discovery
-- offers-first ranking input
-- operator-reviewed merchant incentives
-
-### Request
-
-```http
-GET /offers/US
-```
-
-### Response
-
-```json
-{
-  "country_code": "US",
-  "generated_at": "2026-03-15T23:00:00Z",
-  "offers": [
-    {
-      "offer_id": "offer_xxx",
-      "merchant_slug": "sample-roaster",
-      "merchant_display_name": "Sample Roaster",
-      "title": "10% off first order",
-      "summary": "First-time buyers get 10% off selected coffees.",
-      "offer_type": "discount_code",
-      "valid_through": "2026-04-15T23:59:59Z",
-      "terms_text": "Valid for first order only. Excludes subscriptions."
-    }
-  ]
-}
-```
-
-### Response fields
-
-| Field | Type | Notes |
-|---|---|---|
-| `country_code` | string | Requested country |
-| `generated_at` | timestamp | Artifact freshness hint |
-| `offers` | array | Active offers only |
-
-Each offer item should include:
-
-| Field | Type | Notes |
-|---|---|---|
-| `offer_id` | string | Stable offer ID |
-| `merchant_slug` | string | Merchant route ID |
-| `merchant_display_name` | string | Public merchant name |
-| `title` | string | Short title |
-| `summary` | string | Short summary |
-| `offer_type` | string | Structured type |
-| `valid_through` | timestamp | Hard expiry |
-| `terms_text` | string | Human/claw-readable terms |
-
-### Status codes
-
-- `200 OK` on success
-- `404 Not Found` if the country is unsupported
-
-## 4. `GET /merchants/{slug}/connect`
-
-Returns the MCP connection contract for a merchant.
-
-### Purpose
-
-- turn directory discovery into merchant shopping
-- hide MCP derivation details behind one route
-- return the cart attribution rule together with the endpoint
-
-### Request
-
-```http
-GET /merchants/sample-roaster/connect
-```
-
-### Response
-
-```json
-{
-  "merchant": {
-    "name": "Sample Roaster",
-    "connect_path": "/merchants/sample-roaster/connect",
-    "store_url": "https://sample-roaster.com"
-  },
-  "mcp": {
-    "url": "https://sample-roaster.myshopify.com/api/mcp"
-  },
-  "cart_attributes": [
-    {
-      "key": "lb_source__",
-      "value": "{deploy_id}"
-    }
-  ],
-  "offers": [
-    {
-      "offer_id": "offer_xxx",
-      "title": "10% off first order",
-      "summary": "First-time buyers get 10% off selected coffees.",
-      "offer_type": "discount_code",
-      "valid_through": "2026-04-15T23:59:59Z",
-      "terms_text": "Valid for first order only."
-    }
-  ]
-}
-```
-
-### Response fields
-
-| Field | Type | Notes |
-|---|---|---|
-| `merchant.name` | string | Public merchant name |
-| `merchant.connect_path` | string | Full route for this merchant connect call |
-| `merchant.store_url` | string | Canonical merchant URL |
-| `mcp.url` | string | Resolved Storefront MCP endpoint |
-| `cart_attributes` | array | Attributes the claw must attach |
-| `offers` | array | Active offers for the merchant |
-
-### Resolution rule
-
-Use this order:
-
-1. explicit `storefront_mcp_url`
-2. derived from `store_domain`
-3. derived from `store_url` host
-
-### Status codes
-
-- `200 OK` on success
-- `404 Not Found` if merchant does not exist
-- `409 Conflict` if merchant cannot currently be resolved
-
 ## Contract summary
 
 The generated `skill.md` should only need these assumptions:
 
-- register with `POST /claws/register`
-- discover merchants with `GET /countries/{country_code}`
-- inspect offers with `GET /offers/{country_code}`
-- connect with `GET /merchants/{slug}/connect`
+- choose a category from the root index
+- discover merchants with `GET /{category}/countries/{country_code}`
+- inspect offers with `GET /{category}/offers/{country_code}`
+- connect with `GET /{category}/merchants/{slug}/connect`
 - attach returned cart attributes when updating merchant carts
 
 ## Optional post-handoff share
@@ -2764,4 +2615,4 @@ Keep this outside the core endpoint set until the main shopping loop is proven.
 
 ## Bottom line
 
-If these four endpoint contracts stay stable, the rest of the V0 system can evolve behind them without breaking deploy-facing agent behavior.
+If these public route contracts stay stable, the rest of the V0 system can evolve behind them without breaking deploy-facing agent behavior.

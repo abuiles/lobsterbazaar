@@ -14,7 +14,7 @@ interface DeployConfigFile {
   deploy_mascot_url?: string;
 }
 
-interface DirectoryVerticalEntry {
+interface DirectoryDeployEntry {
   deployId: string;
   brandName: string;
   domain: string;
@@ -99,17 +99,17 @@ function normalizeDirectoryDomain(value: string): string {
   }
 }
 
-async function loadDirectoryVerticals(resolvedVerticalDir: string): Promise<DirectoryVerticalEntry[]> {
-  const verticalsRoot = path.dirname(resolvedVerticalDir);
-  const entries = await readdir(verticalsRoot, { withFileTypes: true });
-  const directoryVerticals: DirectoryVerticalEntry[] = [];
+async function loadDirectoryDeploys(resolvedDeployDir: string): Promise<DirectoryDeployEntry[]> {
+  const deploysRoot = path.dirname(resolvedDeployDir);
+  const entries = await readdir(deploysRoot, { withFileTypes: true });
+  const directoryDeploys: DirectoryDeployEntry[] = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) {
       continue;
     }
 
-    const deployConfigPath = path.join(verticalsRoot, entry.name, "deploy.config.json");
+    const deployConfigPath = path.join(deploysRoot, entry.name, "deploy.config.json");
     let deployConfigText = "";
     try {
       deployConfigText = await readFile(deployConfigPath, "utf8");
@@ -131,7 +131,7 @@ async function loadDirectoryVerticals(resolvedVerticalDir: string): Promise<Dire
       continue;
     }
 
-    directoryVerticals.push({
+    directoryDeploys.push({
       deployId,
       brandName,
       domain,
@@ -147,26 +147,26 @@ async function loadDirectoryVerticals(resolvedVerticalDir: string): Promise<Dire
     });
   }
 
-  return directoryVerticals.sort((left, right) => left.brandName.localeCompare(right.brandName));
+  return directoryDeploys.sort((left, right) => left.brandName.localeCompare(right.brandName));
 }
 
 async function main() {
-  const verticalDir = process.argv[2];
+  const deployDir = process.argv[2];
   const outputPath = process.argv[3];
 
-  if (!verticalDir || !outputPath) {
-    throw new Error("Usage: node scripts/render-vertical-wrangler.ts <vertical-dir> <output-path>");
+  if (!deployDir || !outputPath) {
+    throw new Error("Usage: node scripts/render-vertical-wrangler.ts <deploy-dir> <output-path>");
   }
 
-  const resolvedVerticalDir = path.resolve(verticalDir);
+  const resolvedDeployDir = path.resolve(deployDir);
   const [wranglerText, deployConfigText] = await Promise.all([
-    readFile(path.join(resolvedVerticalDir, "wrangler.jsonc"), "utf8"),
-    readFile(path.join(resolvedVerticalDir, "deploy.config.json"), "utf8")
+    readFile(path.join(resolvedDeployDir, "wrangler.jsonc"), "utf8"),
+    readFile(path.join(resolvedDeployDir, "deploy.config.json"), "utf8")
   ]);
 
   const wranglerConfig = expandEnvPlaceholders(parseJsonObject(wranglerText, "wrangler.jsonc")) as JsonObject;
   const deployConfig = parseJsonObject(deployConfigText, "deploy.config.json") as unknown as DeployConfigFile;
-  const directoryVerticals = await loadDirectoryVerticals(resolvedVerticalDir);
+  const directoryDeploys = await loadDirectoryDeploys(resolvedDeployDir);
 
   const vars: JsonObject = {
     ...(typeof wranglerConfig.vars === "object" && wranglerConfig.vars !== null && !Array.isArray(wranglerConfig.vars)
@@ -180,7 +180,7 @@ async function main() {
     DEPLOY_EMOJI:
       typeof deployConfig.emoji === "string" && deployConfig.emoji.trim() ? deployConfig.emoji.trim() : "🦞"
   };
-  vars.DIRECTORY_VERTICALS_JSON = JSON.stringify(directoryVerticals);
+  vars.DIRECTORY_VERTICALS_JSON = JSON.stringify(directoryDeploys);
 
   if (typeof deployConfig.skill_buying_targets === "string" && deployConfig.skill_buying_targets.trim()) {
     vars.SKILL_BUYING_TARGETS = deployConfig.skill_buying_targets.trim();
@@ -194,11 +194,11 @@ async function main() {
     delete vars.DEPLOY_MASCOT_URL;
   }
 
-  wranglerConfig.$schema = resolveRelativeConfigPath(resolvedVerticalDir, wranglerConfig.$schema);
-  wranglerConfig.main = resolveRelativeConfigPath(resolvedVerticalDir, wranglerConfig.main);
+  wranglerConfig.$schema = resolveRelativeConfigPath(resolvedDeployDir, wranglerConfig.$schema);
+  wranglerConfig.main = resolveRelativeConfigPath(resolvedDeployDir, wranglerConfig.main);
   if (typeof wranglerConfig.assets === "object" && wranglerConfig.assets !== null && !Array.isArray(wranglerConfig.assets)) {
     const assets = wranglerConfig.assets as JsonObject;
-    assets.directory = resolveRelativeConfigPath(resolvedVerticalDir, assets.directory);
+    assets.directory = resolveRelativeConfigPath(resolvedDeployDir, assets.directory);
   }
   wranglerConfig.vars = vars;
 

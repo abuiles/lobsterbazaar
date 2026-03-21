@@ -462,7 +462,7 @@ describe("lobsterbazaar worker", () => {
   });
 
   it("returns merchant MCP connect payload with lb_source__", async () => {
-    const { app } = await createTestHarness();
+    const { app, metrics } = await createTestHarness();
 
     const { response, body } = await requestJson<CategoryMerchantConnectResponse>(
       app,
@@ -481,6 +481,18 @@ describe("lobsterbazaar worker", () => {
         key: "lb_source__",
         value: "lobsterbrew"
       }
+    ]);
+    expect(lastMetricWrite(metrics as RecordingMetricsDataset).blobs).toEqual([
+      "merchant_connect_view",
+      "lobsterbrew",
+      "coffee",
+      "/:category/merchants/:slug/connect",
+      "GET",
+      "ok",
+      "2xx",
+      "",
+      "claimed-roaster",
+      ""
     ]);
   });
 

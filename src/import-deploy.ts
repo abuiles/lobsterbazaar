@@ -76,11 +76,7 @@ export async function materializeDeployPackage(
     brandName: deployPackage.config.brandName,
     deployId: deployPackage.config.deployId,
     deployDomain: deployPackage.config.deployDomain,
-    verticalSummary: deployPackage.config.directorySummary,
-    skillBuyingTargets: deployPackage.config.skillBuyingTargets,
-    registerPath: "/claws/register",
-    countriesPath: "/countries",
-    offersPath: "/offers",
-    merchantConnectPath: "/merchants/{slug}/connect"
+    directorySummary: deployPackage.config.directorySummary,
+    registerPath: "/claws/register"
   });
 }

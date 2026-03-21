@@ -1,177 +1,250 @@
 import type {
+  CategoriesArtifact,
+  Category,
+  CategoryDirectoryEntry,
+  CategorySkillTemplateInput,
   CountryArtifact,
   MerchantArtifact,
   OffersArtifact,
-  SkillTemplateInput
+  RootSkillTemplateInput
 } from "./domain";
 import type { ArtifactStore, Repositories } from "./storage";
-import { renderSkillTemplate } from "./skill";
+import { renderCategorySkillTemplate, renderRootSkillTemplate } from "./skill";
 
-async function buildCountryArtifact(
+interface SkillArtifactBaseInput {
+  brandName: string;
+  deployId: string;
+  deployDomain: string;
+  directorySummary: string;
+  registerPath: string;
+}
+
+function buildCategoryDirectoryEntry(category: Pick<Category, "slug" | "name" | "summary">): CategoryDirectoryEntry {
+  return {
+    slug: category.slug,
+    name: category.name,
+    summary: category.summary,
+    skillPath: `/${category.slug}/skill.md`,
+    countriesPath: `/${category.slug}/countries`
+  };
+}
+
+function buildRootSkillInput(
+  input: SkillArtifactBaseInput,
+  categories: Category[]
+): RootSkillTemplateInput {
+  return {
+    brandName: input.brandName,
+    deployId: input.deployId,
+    deployDomain: input.deployDomain,
+    directorySummary: input.directorySummary,
+    categories: categories.map(buildCategoryDirectoryEntry),
+    categoriesPath: "/categories",
+    registerPath: input.registerPath
+  };
+}
+
+function buildCategorySkillInput(
+  input: SkillArtifactBaseInput,
+  category: Category
+): CategorySkillTemplateInput {
+  return {
+    brandName: input.brandName,
+    deployId: input.deployId,
+    deployDomain: input.deployDomain,
+    category,
+    skillBuyingTargets: category.skillBuyingTargets,
+    registerPath: input.registerPath,
+    countriesPath: `/${category.slug}/countries`,
+    offersPath: `/${category.slug}/offers`,
+    merchantConnectPath: `/${category.slug}/merchants/{slug}/connect`
+  };
+}
+
+async function buildCategoriesArtifact(
   repositories: Repositories,
+  now: string
+): Promise<CategoriesArtifact> {
+  const categories = await repositories.listCategories();
+  return {
+    generatedAt: now,
+    categories: categories.map(buildCategoryDirectoryEntry)
+  };
+}
+
+async function buildCategoryCountryArtifact(
+  repositories: Repositories,
+  categorySlug: string,
   countryCode: string,
   now: string
 ): Promise<CountryArtifact> {
   return {
     countryCode,
     generatedAt: now,
-    merchants: await repositories.listCountryMerchants(countryCode, now)
+    merchants: await repositories.listCountryMerchantsForCategory(categorySlug, countryCode, now)
   };
 }
 
-async function buildOffersArtifact(
+async function buildCategoryOffersArtifact(
   repositories: Repositories,
+  categorySlug: string,
   countryCode: string,
   now: string
 ): Promise<OffersArtifact> {
   return {
     countryCode,
     generatedAt: now,
-    offers: await repositories.listActiveOffers(countryCode, now)
+    offers: await repositories.listActiveOffersForCategory(categorySlug, countryCode, now)
   };
 }
 
-export async function ensureCountryArtifact(
+export async function ensureCategoriesArtifact(
   artifacts: ArtifactStore,
   repositories: Repositories,
+  now: string
+): Promise<CategoriesArtifact> {
+  const cached = await artifacts.getCategories();
+  if (cached) {
+    return cached;
+  }
+
+  const artifact = await buildCategoriesArtifact(repositories, now);
+  await artifacts.putCategories(artifact);
+  return artifact;
+}
+
+export async function ensureCategoryCountryArtifact(
+  artifacts: ArtifactStore,
+  repositories: Repositories,
+  categorySlug: string,
   countryCode: string,
   now: string
 ): Promise<CountryArtifact> {
-  const cached = await artifacts.getCountry(countryCode);
+  const cached = await artifacts.getCategoryCountry(categorySlug, countryCode);
   if (cached) {
     return cached;
   }
 
-  const artifact = await buildCountryArtifact(repositories, countryCode, now);
-  await artifacts.putCountry(artifact);
+  const artifact = await buildCategoryCountryArtifact(repositories, categorySlug, countryCode, now);
+  await artifacts.putCategoryCountry(categorySlug, artifact);
   return artifact;
 }
 
-export async function ensureOffersArtifact(
+export async function ensureCategoryOffersArtifact(
   artifacts: ArtifactStore,
   repositories: Repositories,
+  categorySlug: string,
   countryCode: string,
   now: string
 ): Promise<OffersArtifact> {
-  const cached = await artifacts.getOffers(countryCode);
+  const cached = await artifacts.getCategoryOffers(categorySlug, countryCode);
   if (cached) {
     return cached;
   }
 
-  const artifact = await buildOffersArtifact(repositories, countryCode, now);
-  await artifacts.putOffers(artifact);
+  const artifact = await buildCategoryOffersArtifact(repositories, categorySlug, countryCode, now);
+  await artifacts.putCategoryOffers(categorySlug, artifact);
   return artifact;
 }
 
-export async function ensureMerchantArtifact(
+export async function ensureCategoryMerchantArtifact(
   artifacts: ArtifactStore,
   repositories: Repositories,
+  categorySlug: string,
   slug: string,
   now: string
 ): Promise<MerchantArtifact | null> {
-  const cached = await artifacts.getMerchant(slug);
+  const cached = await artifacts.getCategoryMerchant(categorySlug, slug);
   if (cached) {
     return cached;
   }
 
-  const merchants = await repositories.listMerchantArtifacts(now);
+  const merchants = await repositories.listMerchantArtifactsForCategory(categorySlug, now);
   const merchant = merchants.find((entry) => entry.slug === slug) ?? null;
   if (!merchant) {
     return null;
   }
 
-  await artifacts.putMerchant(merchant);
+  await artifacts.putCategoryMerchant(categorySlug, merchant);
   return merchant;
 }
 
-export async function ensureSkillArtifact(
+export async function ensureRootSkillArtifact(
   artifacts: ArtifactStore,
-  templateInput: SkillTemplateInput
+  repositories: Repositories,
+  now: string,
+  input: SkillArtifactBaseInput
 ): Promise<string> {
-  const cached = await artifacts.getSkill();
+  const cached = await artifacts.getRootSkill();
   if (cached) {
     return cached;
   }
 
-  const skill = renderSkillTemplate(templateInput);
-  await artifacts.putSkill(skill);
+  const categories = await repositories.listCategories();
+  const skill = renderRootSkillTemplate(buildRootSkillInput(input, categories));
+  await artifacts.putRootSkill(skill);
   return skill;
 }
 
-export async function materializeSkillArtifact(
+export async function ensureCategorySkillArtifact(
   artifacts: ArtifactStore,
-  templateInput: SkillTemplateInput
+  category: Category,
+  input: SkillArtifactBaseInput
+): Promise<string> {
+  const cached = await artifacts.getCategorySkill(category.slug);
+  if (cached) {
+    return cached;
+  }
+
+  const skill = renderCategorySkillTemplate(buildCategorySkillInput(input, category));
+  await artifacts.putCategorySkill(category.slug, skill);
+  return skill;
+}
+
+export async function materializeSkillArtifacts(
+  artifacts: ArtifactStore,
+  categories: Category[],
+  input: SkillArtifactBaseInput,
+  now: string
 ): Promise<void> {
-  await artifacts.putSkill(renderSkillTemplate(templateInput));
+  await Promise.all([
+    artifacts.putCategories({
+      generatedAt: now,
+      categories: categories.map(buildCategoryDirectoryEntry)
+    }),
+    artifacts.putRootSkill(renderRootSkillTemplate(buildRootSkillInput(input, categories))),
+    ...categories.map((category) =>
+      artifacts.putCategorySkill(category.slug, renderCategorySkillTemplate(buildCategorySkillInput(input, category)))
+    )
+  ]);
 }
 
 export async function materializePublicArtifacts(
   artifacts: ArtifactStore,
   repositories: Repositories,
   now: string,
-  templateInput: SkillTemplateInput,
-  options: {
-    since?: string;
-  } = {}
+  input: SkillArtifactBaseInput,
+  since?: string
 ): Promise<void> {
-  const { since } = options;
+  const categories = await repositories.listCategories();
+  await materializeSkillArtifacts(artifacts, categories, input, now);
 
-  if (!since) {
-    const [countryCodes, merchantArtifacts] = await Promise.all([
-      repositories.listCountryCodes(),
-      repositories.listMerchantArtifacts(now)
-    ]);
+  await Promise.all(
+    categories.map(async (category) => {
+      const [countryCodes, merchants] = await Promise.all([
+        repositories.listCountryCodesForCategory(category.slug),
+        repositories.listMerchantArtifactsForCategory(category.slug, now, since)
+      ]);
 
-    await Promise.all([
-      ...countryCodes.flatMap((countryCode) => [
-        buildCountryArtifact(repositories, countryCode, now).then((artifact) => artifacts.putCountry(artifact)),
-        buildOffersArtifact(repositories, countryCode, now).then((artifact) => artifacts.putOffers(artifact))
-      ]),
-      ...merchantArtifacts.map((merchant) => artifacts.putMerchant(merchant)),
-      materializeSkillArtifact(artifacts, templateInput)
-    ]);
-
-    return;
-  }
-
-  const [newMerchantArtifacts, allMerchantArtifacts, offerCountryCodes, merchantSlugsFromOffers] = await Promise.all([
-    repositories.listMerchantArtifacts(now, since),
-    repositories.listMerchantArtifacts(now),
-    repositories.listOfferCountryCodesForAddedSince(since),
-    repositories.listOfferMerchantSlugsForAddedSince(since)
-  ]);
-
-  const touchedMerchantSlugs = new Set<string>([
-    ...newMerchantArtifacts.map((merchant) => merchant.slug),
-    ...merchantSlugsFromOffers
-  ]);
-  const touchedCountries = new Set<string>();
-  for (const merchant of newMerchantArtifacts) {
-    for (const countryCode of merchant.countryCodes) {
-      touchedCountries.add(countryCode);
-    }
-  }
-
-  for (const countryCode of offerCountryCodes) {
-    touchedCountries.add(countryCode);
-  }
-
-  const merchantsToMaterialize = allMerchantArtifacts.filter((merchant) => touchedMerchantSlugs.has(merchant.slug));
-  const countryCodesToMaterialize = touchedCountries.size > 0
-    ? Array.from(touchedCountries).sort()
-    : [];
-
-  if (countryCodesToMaterialize.length === 0 && merchantsToMaterialize.length === 0) {
-    await materializeSkillArtifact(artifacts, templateInput);
-    return;
-  }
-
-  await Promise.all([
-    ...countryCodesToMaterialize.map((countryCode) => [
-      buildCountryArtifact(repositories, countryCode, now).then((artifact) => artifacts.putCountry(artifact)),
-      buildOffersArtifact(repositories, countryCode, now).then((artifact) => artifacts.putOffers(artifact))
-    ]).flat(),
-    ...merchantsToMaterialize.map((merchant) => artifacts.putMerchant(merchant)),
-    materializeSkillArtifact(artifacts, templateInput)
-  ]);
+      await Promise.all([
+        ...countryCodes.flatMap((countryCode) => [
+          buildCategoryCountryArtifact(repositories, category.slug, countryCode, now)
+            .then((artifact) => artifacts.putCategoryCountry(category.slug, artifact)),
+          buildCategoryOffersArtifact(repositories, category.slug, countryCode, now)
+            .then((artifact) => artifacts.putCategoryOffers(category.slug, artifact))
+        ]),
+        ...merchants.map((merchant) => artifacts.putCategoryMerchant(category.slug, merchant))
+      ]);
+    })
+  );
 }

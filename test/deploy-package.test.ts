@@ -458,18 +458,24 @@ describe("deploy artifact materialization", () => {
         }
       );
 
-      const [skill, country, merchant, offers] = await Promise.all([
+      const [skill, categories, categorySkill, country, merchant, offers] = await Promise.all([
         readFile(path.join(outputDir, "skill.md"), "utf8"),
-        readFile(path.join(outputDir, "countries", "US.json"), "utf8"),
-        readFile(path.join(outputDir, "merchants", "sample-roaster.json"), "utf8"),
-        readFile(path.join(outputDir, "offers", "US.json"), "utf8")
+        readFile(path.join(outputDir, "categories", "index.json"), "utf8"),
+        readFile(path.join(outputDir, "coffee", "skill.md"), "utf8"),
+        readFile(path.join(outputDir, "coffee", "countries", "US.json"), "utf8"),
+        readFile(path.join(outputDir, "coffee", "merchants", "sample-roaster.json"), "utf8"),
+        readFile(path.join(outputDir, "coffee", "offers", "US.json"), "utf8")
       ]);
 
-      expect(skill).toContain("# Lobster Brew Skill");
-      expect(skill).toContain("## Subscription products");
-      expect(skill).toContain("Version: 1.1.0");
-      expect(skill).toContain("resolution_path = unsupported_subscription_flow");
-      expect(skill).toContain("lb_source__ = lobsterbrew");
+      expect(skill).toContain("# Lobster Brew Root Skill");
+      expect(skill).toContain("Version: 2.0.0");
+      expect(skill).toContain("`GET lobsterbrew.com/{category}/skill.md`");
+      expect(skill).toContain("`GET lobsterbrew.com/categories.md`");
+      expect(categories).toContain("\"slug\": \"coffee\"");
+      expect(categorySkill).toContain("# Lobster Brew Coffee Skill");
+      expect(categorySkill).toContain("`GET lobsterbrew.com/coffee/countries.md`");
+      expect(categorySkill).toContain("GET `lobsterbrew.com/coffee/merchants/{slug}/connect.md`");
+      expect(categorySkill).toContain("lb_source__ = lobsterbrew");
       expect(country).toContain("\"countryCode\": \"US\"");
       expect(merchant).toContain("\"slug\": \"sample-roaster\"");
       expect(merchant).toContain("\"categorySlugs\": [");
@@ -506,7 +512,7 @@ describe("deploy artifact materialization", () => {
 
       expect(failed).toBe(true);
       await expect(readFile(path.join(tmpDir, "escape.json"), "utf8")).rejects.toThrow();
-      await expect(readFile(path.join(outputDir, "merchants", "escape.json"), "utf8")).rejects.toThrow();
+      await expect(readFile(path.join(outputDir, "coffee", "merchants", "escape.json"), "utf8")).rejects.toThrow();
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
     }
@@ -559,8 +565,8 @@ describe("deploy artifact materialization", () => {
         { cwd: process.cwd() }
       );
 
-      await expect(readFile(path.join(outputDir, "merchants", "second-roaster.json"), "utf8")).rejects.toThrow();
-      const remainingMerchant = await readFile(path.join(outputDir, "merchants", "sample-roaster.json"), "utf8");
+      await expect(readFile(path.join(outputDir, "coffee", "merchants", "second-roaster.json"), "utf8")).rejects.toThrow();
+      const remainingMerchant = await readFile(path.join(outputDir, "coffee", "merchants", "sample-roaster.json"), "utf8");
       expect(remainingMerchant).toContain("\"slug\": \"sample-roaster\"");
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
@@ -599,7 +605,7 @@ describe("deploy artifact materialization", () => {
         { cwd: process.cwd() }
       );
 
-      const originalMerchant = await readFile(path.join(outputDir, "merchants", "sample-roaster.json"), "utf8");
+      const originalMerchant = await readFile(path.join(outputDir, "coffee", "merchants", "sample-roaster.json"), "utf8");
 
       await writeDeployPackage(deployDir, {
         merchantsCsv: [
@@ -633,7 +639,7 @@ describe("deploy artifact materialization", () => {
       }
 
       expect(failed).toBe(true);
-      const merchantAfterFailure = await readFile(path.join(outputDir, "merchants", "sample-roaster.json"), "utf8");
+      const merchantAfterFailure = await readFile(path.join(outputDir, "coffee", "merchants", "sample-roaster.json"), "utf8");
       expect(merchantAfterFailure).toBe(originalMerchant);
     } finally {
       await rm(tmpDir, { recursive: true, force: true });

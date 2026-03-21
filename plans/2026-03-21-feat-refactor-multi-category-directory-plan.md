@@ -26,8 +26,8 @@ Merchant truth remains canonical and shared across the instance, while category 
 ## Progress
 
 - [x] Phase 1: Contract and schema refactor
-- [ ] Phase 2: Repository and artifact generation refactor
-- [ ] Phase 3: HTTP routing and presentation surface
+- [x] Phase 2: Repository and artifact generation refactor
+- [x] Phase 3: HTTP routing and presentation surface
 - [ ] Phase 4: Metrics, docs, tooling, and tests
 
 ## Problem Statement / Motivation
@@ -247,12 +247,12 @@ Acceptance gate:
 ## Acceptance Criteria
 
 - [x] One instance can define multiple explicit flat categories such as `coffee` and `bread`.
-- [ ] The root provides a category index plus a root `skill.md` that routes agents into a category.
-- [ ] Each category publishes its own `/{category}/skill.md`.
+- [x] The root provides a category index plus a root `skill.md` that routes agents into a category.
+- [x] Each category publishes its own `/{category}/skill.md`.
 - [x] Merchant truth remains canonical and shared, and one merchant can belong to multiple categories.
-- [ ] Canonical merchant discovery uses category-scoped routes, including `/{category}/countries/{country_code}` and `/{category}/merchants/{slug}/connect`.
-- [ ] Root aggregated country discovery is not introduced as a first-class V1 surface.
-- [ ] Artifact materialization supports multiple categories within one instance.
+- [x] Canonical merchant discovery uses category-scoped routes, including `/{category}/countries/{country_code}` and `/{category}/merchants/{slug}/connect`.
+- [x] Root aggregated country discovery is not introduced as a first-class V1 surface.
+- [x] Artifact materialization supports multiple categories within one instance.
 - [x] SQL generation, import, and in-memory repositories remain deterministic under the new category model.
 - [ ] Metrics and tests are updated to reflect the category-aware contract.
 - [ ] README and example deploy data document the new root-plus-category installation flow.

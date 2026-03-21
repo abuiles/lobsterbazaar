@@ -1,5 +1,6 @@
 import type {
   Category,
+  CategoriesArtifact,
   Claw,
   CountryArtifact,
   FeaturedMerchantSummary,
@@ -16,14 +17,18 @@ import type {
 } from "./domain";
 
 export interface ArtifactStore {
-  getCountry(countryCode: string): Promise<CountryArtifact | null>;
-  putCountry(artifact: CountryArtifact): Promise<void>;
-  getOffers(countryCode: string): Promise<OffersArtifact | null>;
-  putOffers(artifact: OffersArtifact): Promise<void>;
-  getMerchant(slug: string): Promise<MerchantArtifact | null>;
-  putMerchant(artifact: MerchantArtifact): Promise<void>;
-  getSkill(): Promise<string | null>;
-  putSkill(skill: string): Promise<void>;
+  getCategories(): Promise<CategoriesArtifact | null>;
+  putCategories(artifact: CategoriesArtifact): Promise<void>;
+  getCategoryCountry(categorySlug: string, countryCode: string): Promise<CountryArtifact | null>;
+  putCategoryCountry(categorySlug: string, artifact: CountryArtifact): Promise<void>;
+  getCategoryOffers(categorySlug: string, countryCode: string): Promise<OffersArtifact | null>;
+  putCategoryOffers(categorySlug: string, artifact: OffersArtifact): Promise<void>;
+  getCategoryMerchant(categorySlug: string, slug: string): Promise<MerchantArtifact | null>;
+  putCategoryMerchant(categorySlug: string, artifact: MerchantArtifact): Promise<void>;
+  getRootSkill(): Promise<string | null>;
+  putRootSkill(skill: string): Promise<void>;
+  getCategorySkill(categorySlug: string): Promise<string | null>;
+  putCategorySkill(categorySlug: string, skill: string): Promise<void>;
 }
 
 export interface CreateMerchantInput extends Omit<Merchant, "createdAt" | "updatedAt"> {

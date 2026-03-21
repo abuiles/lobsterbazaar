@@ -111,6 +111,14 @@ export interface PublicOffer {
   termsText: string;
 }
 
+export interface CategoryDirectoryEntry {
+  slug: string;
+  name: string;
+  summary: string;
+  skillPath: string;
+  countriesPath: string;
+}
+
 export interface MerchantConnectPayload {
   merchant: {
     name: string;
@@ -147,6 +155,11 @@ export interface OffersArtifact {
   offers: PublicOffer[];
 }
 
+export interface CategoriesArtifact {
+  generatedAt: string;
+  categories: CategoryDirectoryEntry[];
+}
+
 export interface MerchantArtifact {
   slug: string;
   displayName: string;
@@ -159,11 +172,21 @@ export interface MerchantArtifact {
   activeOffersCount: number;
 }
 
-export interface SkillTemplateInput {
+export interface RootSkillTemplateInput {
   brandName: string;
   deployId: string;
   deployDomain: string;
-  verticalSummary: string;
+  directorySummary: string;
+  categories: CategoryDirectoryEntry[];
+  categoriesPath: string;
+  registerPath: string;
+}
+
+export interface CategorySkillTemplateInput {
+  brandName: string;
+  deployId: string;
+  deployDomain: string;
+  category: Pick<Category, "slug" | "name" | "summary" | "skillBuyingTargets">;
   skillBuyingTargets?: string;
   registerPath: string;
   countriesPath: string;

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promise
 import path from "node:path";
 
 import type { ArtifactStore } from "../src/storage";
-import type { CountryArtifact, MerchantArtifact, OffersArtifact } from "../src/domain";
+import type { CategoriesArtifact, CountryArtifact, MerchantArtifact, OffersArtifact } from "../src/domain";
 import { loadDeployPackage } from "../src/deploy-package";
 import { importDeployPackage, materializeDeployPackage } from "../src/import-deploy";
 import { MemoryRepositories } from "../src/memory";
@@ -14,36 +14,52 @@ class FilesystemArtifactStore implements ArtifactStore {
     this.outputRoot = path.resolve(outputDir);
   }
 
-  async getCountry(): Promise<CountryArtifact | null> {
+  async getCategories(): Promise<CategoriesArtifact | null> {
     return null;
   }
 
-  async putCountry(artifact: CountryArtifact): Promise<void> {
-    await this.writeJson(["countries", `${artifact.countryCode}.json`], artifact);
+  async putCategories(artifact: CategoriesArtifact): Promise<void> {
+    await this.writeJson(["categories", "index.json"], artifact);
   }
 
-  async getOffers(): Promise<OffersArtifact | null> {
+  async getCategoryCountry(): Promise<CountryArtifact | null> {
     return null;
   }
 
-  async putOffers(artifact: OffersArtifact): Promise<void> {
-    await this.writeJson(["offers", `${artifact.countryCode}.json`], artifact);
+  async putCategoryCountry(categorySlug: string, artifact: CountryArtifact): Promise<void> {
+    await this.writeJson([categorySlug, "countries", `${artifact.countryCode}.json`], artifact);
   }
 
-  async getMerchant(): Promise<MerchantArtifact | null> {
+  async getCategoryOffers(): Promise<OffersArtifact | null> {
     return null;
   }
 
-  async putMerchant(artifact: MerchantArtifact): Promise<void> {
-    await this.writeJson(["merchants", `${artifact.slug}.json`], artifact);
+  async putCategoryOffers(categorySlug: string, artifact: OffersArtifact): Promise<void> {
+    await this.writeJson([categorySlug, "offers", `${artifact.countryCode}.json`], artifact);
   }
 
-  async getSkill(): Promise<string | null> {
+  async getCategoryMerchant(): Promise<MerchantArtifact | null> {
     return null;
   }
 
-  async putSkill(skill: string): Promise<void> {
+  async putCategoryMerchant(categorySlug: string, artifact: MerchantArtifact): Promise<void> {
+    await this.writeJson([categorySlug, "merchants", `${artifact.slug}.json`], artifact);
+  }
+
+  async getRootSkill(): Promise<string | null> {
+    return null;
+  }
+
+  async putRootSkill(skill: string): Promise<void> {
     await this.writeText(["skill.md"], skill);
+  }
+
+  async getCategorySkill(): Promise<string | null> {
+    return null;
+  }
+
+  async putCategorySkill(categorySlug: string, skill: string): Promise<void> {
+    await this.writeText([categorySlug, "skill.md"], skill);
   }
 
   private async writeJson(parts: string[], value: unknown): Promise<void> {

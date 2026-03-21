@@ -1,43 +1,91 @@
-import type { SkillTemplateInput } from "./domain";
+import type { CategorySkillTemplateInput, RootSkillTemplateInput } from "./domain";
 
-export function renderSkillTemplate(input: SkillTemplateInput): string {
-  const buyingTargets = input.skillBuyingTargets?.trim() || "from merchants in this vertical";
+export function renderRootSkillTemplate(input: RootSkillTemplateInput): string {
+  const categoryLines = input.categories.length === 0
+    ? ["No categories are published yet."]
+    : input.categories.flatMap((category) => [
+        `- ${category.name} (\`${category.slug}\`)`,
+        `  - summary: ${category.summary}`,
+        `  - skill_path: \`${category.skillPath}\``,
+        `  - countries_path: \`${category.countriesPath}\``
+      ]);
 
   return `---
 name: ${input.deployId}
-description: ${input.verticalSummary}
+description: ${input.directorySummary}
 homepage: ${input.deployDomain}
 ---
 
-# ${input.brandName} Skill
+# ${input.brandName} Root Skill
 
-Version: 1.1.0
+Version: 2.0.0
 Base URL: ${input.deployDomain}
 
-${input.verticalSummary}
+${input.directorySummary}
+
+Use this root skill to choose the right category first. Do not start merchant discovery from the root. Pick a category, then switch to that category's skill before browsing merchants or offers.
+
+## What this skill does
+
+- Lists the categories available in this instance
+- Routes the agent into the right category-specific skill
+- Keeps merchant discovery category-scoped from the first real discovery step onward
+- Does not require claw registration for read-only discovery
+
+## Discovery
+
+1. Start with \`GET ${input.deployDomain}${input.categoriesPath}.md\`
+2. Choose the category that best matches the owner's intent
+3. Fetch that category's skill at \`GET ${input.deployDomain}/{category}/skill.md\`
+4. Continue discovery only inside that category namespace
+
+## Published Categories
+
+${categoryLines.join("\n")}
+
+## Safety
+
+- Do not treat the root as a merchant discovery surface
+- Do not mix merchants across categories unless a future root aggregation route explicitly exists
+- Keep preferences and prior purchases in your own local memory
+- Do not attempt payment completion
+`;
+}
+
+export function renderCategorySkillTemplate(input: CategorySkillTemplateInput): string {
+  const buyingTargets = input.skillBuyingTargets?.trim() || input.category.skillBuyingTargets?.trim()
+    || `from merchants in the ${input.category.name.toLowerCase()} category`;
+
+  return `---
+name: ${input.deployId}-${input.category.slug}
+description: ${input.category.summary}
+homepage: ${input.deployDomain}
+---
+
+# ${input.brandName} ${input.category.name} Skill
+
+Version: 2.0.0
+Base URL: ${input.deployDomain}
+Category: ${input.category.name} (\`${input.category.slug}\`)
+
+${input.category.summary}
 
 Use it when the owner wants to buy ${buyingTargets}. Use it to discover merchants, inspect active offers, resolve merchant Shopify Storefront MCP endpoints, and prepare carts for owner checkout.
 
 ## What this skill does
 
-- Uses this service as the directory and routing layer
+- Uses this service as the category-specific directory and routing layer
 - Uses each merchant's Shopify Storefront MCP endpoint for live catalog, cart, and checkout work
 - Keeps the owner in control of payment by handing off Shopify checkout instead of completing payment directly
 - Uses the installed skill file as the authoritative instruction source
-
-## Versioning
-
-- Treat \`Version\` in this file as the local skill version
-- Do not re-fetch remote instructions during normal use
-- Runtime requests to \`${input.deployDomain}\` are for directory data only
-- If Lobster Brew returns a version header or version field that differs from this file, note that the local skill may be stale without changing behavior automatically
+- Does not require claw registration for discovery or merchant handoff
 
 ## Discovery
 
-1. Start with \`GET ${input.deployDomain}${input.countriesPath}.md\` to see supported countries
+1. Start with \`GET ${input.deployDomain}${input.countriesPath}.md\` to see supported countries for this category
 2. Choose a country that matches the owner's location when possible
 3. Fetch \`GET ${input.deployDomain}${input.countriesPath}/{country_code}.md\`
-4. Use \`GET ${input.deployDomain}${input.offersPath}/{country_code}.md\` to prioritize active offers
+4. Use \`GET ${input.deployDomain}${input.offersPath}/{country_code}.md\` to prioritize active offers in this category
 5. Choose a merchant before using Shopify Storefront MCP
 
 ## Merchant connect
@@ -59,23 +107,6 @@ Prefer the \`.md\` endpoints for agent consumption. Use the JSON endpoints only 
 
 Treat merchant MCP data as the source of truth for products, pricing, availability, cart state, and checkout URLs.
 
-## Subscription products
-
-When the merchant MCP exposes subscription choices, inspect subscription fields before updating the cart.
-
-1. Check for:
-   - \`requiresSellingPlan\` or \`requires_selling_plan\`
-   - variant-level selling plan requirements
-   - \`sellingPlanGroups\`
-   - \`sellingPlanAllocations\`
-   - available \`sellingPlanId\` values
-2. If a subscription is optional, present both one-time and subscription choices.
-3. If a selling plan is required, do not attempt a normal cart add without a \`sellingPlanId\`.
-4. Ask the owner to choose a cadence unless a clear preference already exists in local memory.
-5. Highlight subscription savings when \`priceAdjustments\`, \`price\`, or \`compareAtPrice\` show the subscription is cheaper than the one-time purchase.
-6. Try the merchant MCP cart and checkout flow first.
-7. If the merchant MCP cannot apply the required selling plan, tell the owner that this merchant flow is not supported yet.
-
 ## Cart rule
 
 When updating carts, attach private cart attribute only if the merchant MCP supports cart attributes cleanly:
@@ -83,31 +114,6 @@ When updating carts, attach private cart attribute only if the merchant MCP supp
 - \`lb_source__ = ${input.deployId}\`
 
 Otherwise omit the attribute instead of assuming support.
-
-## Final handoff
-
-When you finish, return a structured summary with:
-
-- \`merchant\`
-- \`product\`
-- \`variant\`
-- \`purchase_type\`
-- \`selling_plan_name\`
-- \`selling_plan_id\`
-- \`cadence\`
-- \`savings_summary\`
-- \`checkout_url\`
-- \`resolution_path\`
-
-Use \`resolution_path = mcp_cart\` when merchant MCP created the cart.
-Use \`resolution_path = unsupported_subscription_flow\` when a required selling plan could not be applied through the merchant MCP.
-
-Say clearly when:
-
-- the item is subscription-only
-- the available cadences are every 1, 2, or 4 weeks, monthly, or similar
-- the subscription saves money versus one-time purchase
-- the merchant MCP could not attach the required selling plan and the flow is not supported yet
 
 ## Safety
 

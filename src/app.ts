@@ -1,17 +1,27 @@
 import {
-  ensureCountryArtifact,
-  ensureMerchantArtifact,
-  ensureOffersArtifact,
-  ensureSkillArtifact,
-  materializePublicArtifacts,
-  materializeSkillArtifact
+  ensureCategoriesArtifact,
+  ensureCategoryCountryArtifact,
+  ensureCategoryMerchantArtifact,
+  ensureCategoryOffersArtifact,
+  ensureCategorySkillArtifact,
+  ensureRootSkillArtifact,
+  materializeSkillArtifacts,
+  materializePublicArtifacts
 } from "./artifacts";
 import { readDeployConfig, type Env } from "./config";
-import type { FeaturedMerchantSummary, MerchantConnectPayload, RegisterClawInput } from "./domain";
+import type {
+  CategoriesArtifact,
+  Category,
+  CategoryDirectoryEntry,
+  FeaturedMerchantSummary,
+  MerchantArtifact,
+  MerchantConnectPayload,
+  RegisterClawInput
+} from "./domain";
 import { badRequest, notFound } from "./errors";
 import { errorResponse, html, isMethod, json, parseJson, text } from "./http";
 import { prepareRequestMetric, recordRequestMetric } from "./metrics";
-import { deriveStorefrontMcpUrl, normalizeCountryCode } from "./merchant";
+import { normalizeCountryCode } from "./merchant";
 import { R2ArtifactStore } from "./r2";
 import { D1Repositories } from "./d1";
 import type { ArtifactStore, Repositories } from "./storage";
@@ -33,6 +43,17 @@ function requireOperatorAccess(request: Request, operatorToken?: string): void {
   if (!operatorToken || !providedToken || providedToken !== operatorToken) {
     throw notFound("Route not found");
   }
+}
+
+function buildSkillArtifactInput(config: ReturnType<typeof readDeployConfig>) {
+  return {
+    brandName: config.brandName,
+    deployId: config.deployId,
+    deployDomain: config.deployDomain,
+    directorySummary: config.verticalSummary,
+    categoriesPath: "/categories",
+    registerPath: "/claws/register"
+  };
 }
 
 export function createApp(dependencies: AppDependencies) {
@@ -57,22 +78,53 @@ export function createApp(dependencies: AppDependencies) {
         }
 
         if (normalizedPath === "/" && isMethod(request, "GET")) {
-          const featuredMerchants = await dependencies.repositories.listFeaturedMerchants(dependencies.now());
-          response = html(renderLandingPage(dependencies.config, url.origin, featuredMerchants));
+          const [featuredMerchants, categoriesArtifact] = await Promise.all([
+            dependencies.repositories.listFeaturedMerchants(dependencies.now()),
+            ensureCategoriesArtifact(
+              dependencies.artifacts,
+              dependencies.repositories,
+              dependencies.now()
+            )
+          ]);
+
+          response = html(
+            renderLegacyLandingPage(
+              dependencies.config,
+              url.origin,
+              featuredMerchants,
+              categoriesArtifact.categories
+            )
+          );
         } else if (normalizedPath === "/skill" && isMethod(request, "GET")) {
-          const skill = await ensureSkillArtifact(dependencies.artifacts, {
-            brandName: dependencies.config.brandName,
-            deployId: dependencies.config.deployId,
-            deployDomain: dependencies.config.deployDomain,
-            verticalSummary: dependencies.config.verticalSummary,
-            skillBuyingTargets: dependencies.config.skillBuyingTargets,
-            registerPath: "/claws/register",
-            countriesPath: "/countries",
-            offersPath: "/offers",
-            merchantConnectPath: "/merchants/{slug}/connect"
-          });
+          const skill = await ensureRootSkillArtifact(
+            dependencies.artifacts,
+            dependencies.repositories,
+            dependencies.now(),
+            buildSkillArtifactInput(dependencies.config)
+          );
 
           response = text(skill, { headers: { "content-type": "text/markdown; charset=utf-8" } });
+        } else if (normalizedPath === "/categories" && isMethod(request, "GET")) {
+          const artifact = await ensureCategoriesArtifact(
+            dependencies.artifacts,
+            dependencies.repositories,
+            dependencies.now()
+          );
+
+          response = wantsMarkdown
+            ? text(renderCategoriesIndexMarkdown(artifact, url.origin), {
+              headers: { "content-type": "text/markdown; charset=utf-8" }
+            })
+            : json({
+              generated_at: artifact.generatedAt,
+              categories: artifact.categories.map((category) => ({
+                slug: category.slug,
+                name: category.name,
+                summary: category.summary,
+                skill_path: category.skillPath,
+                countries_path: category.countriesPath
+              }))
+            });
         } else if (normalizedPath === "/claws/register" && isMethod(request, "POST")) {
           const payload = await parseRegisterRequest(request);
           const result = await dependencies.repositories.createClaw(payload, dependencies.config.deployId);
@@ -89,178 +141,230 @@ export function createApp(dependencies: AppDependencies) {
             },
             { status: 201 }
           );
-        } else if (normalizedPath === "/countries" && isMethod(request, "GET")) {
-          const countryCodes = await dependencies.repositories.listCountryCodes();
-          response = wantsMarkdown
-            ? text(
-              renderCountriesIndexMarkdown(countryCodes),
-              { headers: { "content-type": "text/markdown; charset=utf-8" } }
-            )
-            : json({
-              generated_at: dependencies.now(),
-              countries: countryCodes
-            });
         } else {
-          const countryMatch = normalizedPath.match(/^\/countries\/([A-Za-z]{2,3})$/);
-          if (countryMatch && isMethod(request, "GET")) {
-            const countryCode = normalizeCountryCode(countryMatch[1] ?? "");
-            if (!(await dependencies.repositories.supportsCountry(countryCode))) {
-              throw notFound("Country not found");
-            }
-
-            const artifact = await ensureCountryArtifact(
+          const categorySkillMatch = normalizedPath.match(/^\/([^/]+)\/skill$/);
+          if (categorySkillMatch && isMethod(request, "GET")) {
+            const categorySlug = categorySkillMatch[1] ?? "";
+            const category = await requireCategory(dependencies.repositories, categorySlug);
+            const skill = await ensureCategorySkillArtifact(
               dependencies.artifacts,
-              dependencies.repositories,
-              countryCode,
-              dependencies.now()
+              category,
+              buildSkillArtifactInput(dependencies.config)
             );
 
-            response = wantsMarkdown
-              ? text(renderCountryMarkdown(artifact, url.origin), {
-                headers: { "content-type": "text/markdown; charset=utf-8" }
-              })
-              : json({
-                country_code: artifact.countryCode,
-                generated_at: artifact.generatedAt,
-                merchants: artifact.merchants.map((merchant) => ({
-                  slug: merchant.slug,
-                  display_name: merchant.displayName,
-                  store_url: merchant.storeUrl,
-                  summary: merchant.summary,
-                  description: merchant.description,
-                  active_offers_count: merchant.activeOffersCount
-                }))
-              });
+            response = text(skill, { headers: { "content-type": "text/markdown; charset=utf-8" } });
           } else {
-            const offersMatch = normalizedPath.match(/^\/offers\/([A-Za-z]{2,3})$/);
-            if (offersMatch && isMethod(request, "GET")) {
-              const countryCode = normalizeCountryCode(offersMatch[1] ?? "");
-              if (!(await dependencies.repositories.supportsCountry(countryCode))) {
-                throw notFound("Country not found");
-              }
-
-              const artifact = await ensureOffersArtifact(
-                dependencies.artifacts,
-                dependencies.repositories,
-                countryCode,
-                dependencies.now()
-              );
-
+            const categoryCountriesIndexMatch = normalizedPath.match(/^\/([^/]+)\/countries$/);
+            if (categoryCountriesIndexMatch && isMethod(request, "GET")) {
+              const categorySlug = categoryCountriesIndexMatch[1] ?? "";
+              const category = await requireCategory(dependencies.repositories, categorySlug);
+              const countryCodes = await dependencies.repositories.listCountryCodesForCategory(category.slug);
               response = wantsMarkdown
-                ? text(renderOffersMarkdown(artifact.offers, countryCode), {
+                ? text(renderCategoryCountriesIndexMarkdown(category, countryCodes, url.origin), {
                   headers: { "content-type": "text/markdown; charset=utf-8" }
                 })
                 : json({
-                  country_code: artifact.countryCode,
-                  generated_at: artifact.generatedAt,
-                  offers: artifact.offers.map((offer) => ({
-                    offer_id: offer.offerId,
-                    merchant_slug: offer.merchantSlug,
-                    merchant_display_name: offer.merchantDisplayName,
-                    title: offer.title,
-                    summary: offer.summary,
-                    offer_type: offer.offerType,
-                    valid_through: offer.validThrough,
-                    terms_text: offer.termsText
-                  }))
+                  category_slug: category.slug,
+                  generated_at: dependencies.now(),
+                  countries: countryCodes
                 });
             } else {
-              const merchantMatch = normalizedPath.match(/^\/merchants\/([^/]+)\/connect$/);
-              if (merchantMatch && isMethod(request, "GET")) {
-                const slug = merchantMatch[1] ?? "";
-                const artifact = await ensureMerchantArtifact(
+              const categoryCountryMatch = normalizedPath.match(/^\/([^/]+)\/countries\/([A-Za-z]{2,3})$/);
+              if (categoryCountryMatch && isMethod(request, "GET")) {
+                const categorySlug = categoryCountryMatch[1] ?? "";
+                const countryCode = normalizeCountryCode(categoryCountryMatch[2] ?? "");
+                const category = await requireCategory(dependencies.repositories, categorySlug);
+                if (!(await dependencies.repositories.supportsCountryForCategory(category.slug, countryCode))) {
+                  throw notFound("Country not found");
+                }
+
+                const artifact = await ensureCategoryCountryArtifact(
                   dependencies.artifacts,
                   dependencies.repositories,
-                  slug,
+                  category.slug,
+                  countryCode,
                   dependencies.now()
                 );
 
-                if (!artifact) {
-                  throw notFound("Merchant not found");
-                }
-
-                const payload: MerchantConnectPayload = {
-                  merchant: {
-                    name: artifact.displayName,
-                    slug: artifact.slug,
-                    connectPath: `/merchants/${artifact.slug}/connect`,
-                    storeUrl: artifact.storeUrl
-                  },
-                  mcp: {
-                    url: artifact.storefrontMcpUrl
-                  },
-                  offers: await dependencies.repositories.listActiveOffersForMerchant(
-                    artifact.slug,
-                    dependencies.now()
-                  ),
-                  cartAttributes: [
-                    {
-                      key: "lb_source__",
-                      value: dependencies.config.deployId
-                    }
-                  ]
-                };
-
                 response = wantsMarkdown
-                  ? text(renderMerchantConnectMarkdown(payload), {
+                  ? text(renderCountryMarkdown(category, artifact, url.origin), {
                     headers: { "content-type": "text/markdown; charset=utf-8" }
                   })
                   : json({
-                    merchant: {
-                      name: payload.merchant.name,
-                      connect_path: payload.merchant.connectPath,
-                      store_url: payload.merchant.storeUrl
-                    },
-                    mcp: payload.mcp,
-                    offers: payload.offers.map((offer) => ({
-                      offer_id: offer.offerId,
-                      title: offer.title,
-                      summary: offer.summary,
-                      offer_type: offer.offerType,
-                      valid_through: offer.validThrough,
-                      terms_text: offer.termsText
-                    })),
-                    cart_attributes: payload.cartAttributes.map((attribute) => ({
-                      key: attribute.key,
-                      value: attribute.value
+                    category_slug: category.slug,
+                    country_code: artifact.countryCode,
+                    generated_at: artifact.generatedAt,
+                    merchants: artifact.merchants.map((merchant) => ({
+                      slug: merchant.slug,
+                      display_name: merchant.displayName,
+                      store_url: merchant.storeUrl,
+                      summary: merchant.summary,
+                      description: merchant.description,
+                      active_offers_count: merchant.activeOffersCount
                     }))
                   });
-              } else if (normalizedPath === "/internal/materialize" && isMethod(request, "POST")) {
-                requireOperatorAccess(request, dependencies.operatorToken);
+              } else {
+                const categoryOffersMatch = normalizedPath.match(/^\/([^/]+)\/offers\/([A-Za-z]{2,3})$/);
+                if (categoryOffersMatch && isMethod(request, "GET")) {
+                  const categorySlug = categoryOffersMatch[1] ?? "";
+                  const countryCode = normalizeCountryCode(categoryOffersMatch[2] ?? "");
+                  const category = await requireCategory(dependencies.repositories, categorySlug);
+                  if (!(await dependencies.repositories.supportsCountryForCategory(category.slug, countryCode))) {
+                    throw notFound("Country not found");
+                  }
 
-                const target = parseMaterializeTarget(url.searchParams.get("target"));
-                const sinceRaw = url.searchParams.get("since");
-                const since = parseSince(sinceRaw);
-                const templateInput = {
-                  brandName: dependencies.config.brandName,
-                  deployId: dependencies.config.deployId,
-                  deployDomain: dependencies.config.deployDomain,
-                  verticalSummary: dependencies.config.verticalSummary,
-                  skillBuyingTargets: dependencies.config.skillBuyingTargets,
-                  registerPath: "/claws/register",
-                  countriesPath: "/countries",
-                  offersPath: "/offers",
-                  merchantConnectPath: "/merchants/{slug}/connect"
-                };
-
-                if (target === "skill") {
-                  await materializeSkillArtifact(dependencies.artifacts, templateInput);
-                } else {
-                  await materializePublicArtifacts(
+                  const artifact = await ensureCategoryOffersArtifact(
                     dependencies.artifacts,
                     dependencies.repositories,
-                    dependencies.now(),
-                    templateInput,
-                    { since }
+                    category.slug,
+                    countryCode,
+                    dependencies.now()
                   );
-                }
 
-                response = json({ ok: true });
-              } else if (normalizedPath === "/internal/metrics/materialize" && isMethod(request, "POST")) {
-                requireOperatorAccess(request, dependencies.operatorToken);
-                response = json({ ok: true });
-              } else {
-                throw notFound("Route not found");
+                  response = wantsMarkdown
+                    ? text(renderOffersMarkdown(category, artifact.offers, countryCode), {
+                      headers: { "content-type": "text/markdown; charset=utf-8" }
+                    })
+                    : json({
+                      category_slug: category.slug,
+                      country_code: artifact.countryCode,
+                      generated_at: artifact.generatedAt,
+                      offers: artifact.offers.map((offer) => ({
+                        offer_id: offer.offerId,
+                        merchant_slug: offer.merchantSlug,
+                        merchant_display_name: offer.merchantDisplayName,
+                        title: offer.title,
+                        summary: offer.summary,
+                        offer_type: offer.offerType,
+                        valid_through: offer.validThrough,
+                        terms_text: offer.termsText
+                      }))
+                    });
+                } else {
+                  const categoryMerchantMatch = normalizedPath.match(/^\/([^/]+)\/merchants\/([^/]+)$/);
+                  if (categoryMerchantMatch && isMethod(request, "GET")) {
+                    const categorySlug = categoryMerchantMatch[1] ?? "";
+                    const slug = categoryMerchantMatch[2] ?? "";
+                    const category = await requireCategory(dependencies.repositories, categorySlug);
+                    const artifact = await ensureCategoryMerchantArtifact(
+                      dependencies.artifacts,
+                      dependencies.repositories,
+                      category.slug,
+                      slug,
+                      dependencies.now()
+                    );
+
+                    if (!artifact) {
+                      throw notFound("Merchant not found");
+                    }
+
+                    response = wantsMarkdown
+                      ? text(renderMerchantMarkdown(category, artifact, url.origin), {
+                        headers: { "content-type": "text/markdown; charset=utf-8" }
+                      })
+                      : json(renderMerchantResponse(category, artifact));
+                  } else {
+                    const merchantMatch = normalizedPath.match(/^\/([^/]+)\/merchants\/([^/]+)\/connect$/);
+                    if (merchantMatch && isMethod(request, "GET")) {
+                      const categorySlug = merchantMatch[1] ?? "";
+                      const slug = merchantMatch[2] ?? "";
+                      const category = await requireCategory(dependencies.repositories, categorySlug);
+                      const artifact = await ensureCategoryMerchantArtifact(
+                        dependencies.artifacts,
+                        dependencies.repositories,
+                        category.slug,
+                        slug,
+                        dependencies.now()
+                      );
+
+                      if (!artifact) {
+                        throw notFound("Merchant not found");
+                      }
+
+                      const payload: MerchantConnectPayload = {
+                        merchant: {
+                          name: artifact.displayName,
+                          slug: artifact.slug,
+                          connectPath: `/${category.slug}/merchants/${artifact.slug}/connect`,
+                          storeUrl: artifact.storeUrl
+                        },
+                        mcp: {
+                          url: artifact.storefrontMcpUrl
+                        },
+                        offers: await listCategoryMerchantOffers(
+                          dependencies.repositories,
+                          category.slug,
+                          artifact,
+                          dependencies.now()
+                        ),
+                        cartAttributes: [
+                          {
+                            key: "lb_source__",
+                            value: dependencies.config.deployId
+                          }
+                        ]
+                      };
+
+                      response = wantsMarkdown
+                        ? text(renderMerchantConnectMarkdown(category, payload), {
+                          headers: { "content-type": "text/markdown; charset=utf-8" }
+                        })
+                        : json({
+                          category_slug: category.slug,
+                          merchant: {
+                            name: payload.merchant.name,
+                            connect_path: payload.merchant.connectPath,
+                            store_url: payload.merchant.storeUrl
+                          },
+                          mcp: payload.mcp,
+                          offers: payload.offers.map((offer) => ({
+                            offer_id: offer.offerId,
+                            title: offer.title,
+                            summary: offer.summary,
+                            offer_type: offer.offerType,
+                            valid_through: offer.validThrough,
+                            terms_text: offer.termsText
+                          })),
+                          cart_attributes: payload.cartAttributes.map((attribute) => ({
+                            key: attribute.key,
+                            value: attribute.value
+                          }))
+                        });
+                    } else if (normalizedPath === "/internal/materialize" && isMethod(request, "POST")) {
+                      requireOperatorAccess(request, dependencies.operatorToken);
+
+                      const sinceRaw = url.searchParams.get("since");
+                      const since = parseSince(sinceRaw);
+                      const target = parseMaterializeTarget(url.searchParams.get("target"));
+                      const skillInput = buildSkillArtifactInput(dependencies.config);
+
+                      if (target === "skill") {
+                        const categories = await dependencies.repositories.listCategories();
+                        await materializeSkillArtifacts(
+                          dependencies.artifacts,
+                          categories,
+                          skillInput,
+                          dependencies.now()
+                        );
+                      } else {
+                        await materializePublicArtifacts(
+                          dependencies.artifacts,
+                          dependencies.repositories,
+                          dependencies.now(),
+                          skillInput,
+                          since
+                        );
+                      }
+
+                      response = json({ ok: true });
+                    } else if (normalizedPath === "/internal/metrics/materialize" && isMethod(request, "POST")) {
+                      requireOperatorAccess(request, dependencies.operatorToken);
+                      response = json({ ok: true });
+                    } else {
+                      throw notFound("Route not found");
+                    }
+                  }
+                }
               }
             }
           }
@@ -315,13 +419,70 @@ async function recordRequestMetricSafely(
   }
 }
 
-function renderCountriesIndexMarkdown(countryCodes: string[]): string {
-  const header = "# Available Countries";
-  if (countryCodes.length === 0) {
-    return `${header}\n\nNo countries are available yet.`;
+async function requireCategory(repositories: Repositories, slug: string): Promise<Category> {
+  const category = await repositories.getCategory(slug);
+  if (!category) {
+    throw notFound("Category not found");
   }
 
-  return `${header}\n\n${countryCodes.map((code) => `- ${code}`).join("\n")}`;
+  return category;
+}
+
+async function listCategoryMerchantOffers(
+  repositories: Repositories,
+  categorySlug: string,
+  merchant: Pick<MerchantArtifact, "slug" | "countryCodes">,
+  now: string
+) {
+  const offersByCountry = await Promise.all(
+    merchant.countryCodes.map((countryCode) =>
+      repositories.listActiveOffersForCategory(categorySlug, countryCode, now)
+    )
+  );
+
+  const seen = new Set<string>();
+  return offersByCountry
+    .flat()
+    .filter((offer) => offer.merchantSlug === merchant.slug)
+    .filter((offer) => {
+      if (seen.has(offer.offerId)) {
+        return false;
+      }
+
+      seen.add(offer.offerId);
+      return true;
+    });
+}
+
+function renderCategoriesIndexMarkdown(artifact: CategoriesArtifact, origin: string): string {
+  if (artifact.categories.length === 0) {
+    return "# Categories\n\nNo categories are available yet.";
+  }
+
+  const lines = ["# Categories", ""];
+  for (const category of artifact.categories) {
+    lines.push(`- ${category.name} (\`${category.slug}\`)`);
+    lines.push(`  - summary: ${category.summary}`);
+    lines.push(`  - skill_url: \`${origin}${category.skillPath}\``);
+    lines.push(`  - countries_url: \`${origin}${category.countriesPath}.md\``);
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+function renderCategoryCountriesIndexMarkdown(category: Category, countryCodes: string[], origin: string): string {
+  const header = `# ${category.name} Countries`;
+  if (countryCodes.length === 0) {
+    return `${header}\n\nNo countries are available in this category yet.`;
+  }
+
+  const lines = [header, ""];
+  for (const countryCode of countryCodes) {
+    lines.push(`- ${countryCode}: \`${origin}/${category.slug}/countries/${countryCode}.md\``);
+  }
+
+  return lines.join("\n");
 }
 
 function parseSince(since: string | null): string | undefined {
@@ -349,7 +510,7 @@ function parseMaterializeTarget(target: string | null): "all" | "skill" {
   throw badRequest("`target` must be `skill` when provided");
 }
 
-function renderCountryMarkdown(artifact: {
+function renderCountryMarkdown(category: Category, artifact: {
   countryCode: string;
   merchants: Array<{
     slug: string;
@@ -359,23 +520,24 @@ function renderCountryMarkdown(artifact: {
     activeOffersCount: number;
   }>;
 }, origin: string): string {
-  const header = `# Merchants in ${artifact.countryCode}`;
+  const header = `# ${category.name} Merchants in ${artifact.countryCode}`;
   if (artifact.merchants.length === 0) {
     return `${header}\n\nNo merchants are available in this country.`;
   }
 
   const merchants = artifact.merchants.map((merchant) => {
     const offerHint = merchant.activeOffersCount === 0 ? "no active offers" : `${merchant.activeOffersCount} active offer(s)`;
-    const connectPath = `/merchants/${merchant.slug}/connect.md`;
+    const merchantPath = `/${category.slug}/merchants/${merchant.slug}.md`;
+    const connectPath = `/${category.slug}/merchants/${merchant.slug}/connect.md`;
     const descriptionLine = merchant.description ? `\n  - description: ${merchant.description}` : "";
     const summaryLine = merchant.summary ? `\n  - summary: ${merchant.summary}` : "";
-    return `- ${merchant.slug}: ${offerHint}${descriptionLine}${summaryLine}\n  - store_url: \`${merchant.storeUrl}\`\n  - connect_path: \`${connectPath}\`\n  - connect_url: \`${origin}${connectPath}\``;
+    return `- ${merchant.slug}: ${offerHint}${descriptionLine}${summaryLine}\n  - store_url: \`${merchant.storeUrl}\`\n  - merchant_url: \`${origin}${merchantPath}\`\n  - connect_url: \`${origin}${connectPath}\``;
   });
 
   return `${header}\n\n${merchants.join("\n\n")}`;
 }
 
-function renderOffersMarkdown(offers: Array<{
+function renderOffersMarkdown(category: Category, offers: Array<{
   offerId: string;
   merchantSlug: string;
   merchantDisplayName: string;
@@ -386,7 +548,7 @@ function renderOffersMarkdown(offers: Array<{
   termsText: string;
 }>, countryCode: string): string {
   const lines = [
-    `# Active Offers in ${countryCode}`,
+    `# Active ${category.name} Offers in ${countryCode}`,
     ""
   ];
 
@@ -409,7 +571,36 @@ function renderOffersMarkdown(offers: Array<{
   return lines.join("\n");
 }
 
-function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string {
+function renderMerchantResponse(category: Category, artifact: MerchantArtifact) {
+  return {
+    category_slug: category.slug,
+    merchant: {
+      slug: artifact.slug,
+      display_name: artifact.displayName,
+      store_url: artifact.storeUrl,
+      country_codes: artifact.countryCodes,
+      category_slugs: artifact.categorySlugs,
+      active_offers_count: artifact.activeOffersCount,
+      connect_path: `/${category.slug}/merchants/${artifact.slug}/connect`
+    }
+  };
+}
+
+function renderMerchantMarkdown(category: Category, artifact: MerchantArtifact, origin: string): string {
+  return [
+    `# ${artifact.displayName}`,
+    "",
+    `- category: \`${category.slug}\``,
+    `- merchant_slug: \`${artifact.slug}\``,
+    `- store_url: \`${artifact.storeUrl}\``,
+    `- countries: ${artifact.countryCodes.map((countryCode) => `\`${countryCode}\``).join(", ")}`,
+    `- category_slugs: ${artifact.categorySlugs.map((categorySlug) => `\`${categorySlug}\``).join(", ")}`,
+    `- active_offers_count: ${artifact.activeOffersCount}`,
+    `- connect_url: \`${origin}/${category.slug}/merchants/${artifact.slug}/connect.md\``
+  ].join("\n");
+}
+
+function renderMerchantConnectMarkdown(category: Category, payload: MerchantConnectPayload): string {
   const cartAttributeLines = payload.cartAttributes.length === 0
     ? ["  - none"]
     : payload.cartAttributes.map((attribute) => `  - ${attribute.key}: ${attribute.value}`);
@@ -421,6 +612,7 @@ function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string 
     "Keep output constrained to this context for shop handoff.",
     "",
     "## Merchant Context",
+    `- category_slug: \`${category.slug}\``,
     `- merchant_name: \`${payload.merchant.name}\``,
     `- merchant_slug: \`${payload.merchant.slug}\``,
     `- connect_path: \`${payload.merchant.connectPath}\``,
@@ -451,35 +643,83 @@ function renderMerchantConnectMarkdown(payload: MerchantConnectPayload): string 
   return lines.join("\n");
 }
 
-function renderDirectoryCards(config: ReturnType<typeof readDeployConfig>): string {
-  const directoryVerticals = [...config.directoryVerticals].sort((left, right) => {
-    if (left.deployId === config.deployId) {
-      return -1;
-    }
-    if (right.deployId === config.deployId) {
-      return 1;
-    }
-    return left.brandName.localeCompare(right.brandName);
-  });
+function renderLandingPage(
+  config: ReturnType<typeof readDeployConfig>,
+  origin: string,
+  categories: Category[]
+): string {
+  const skillUrl = `${origin.replace(/\/$/, "")}/skill.md`;
+  const categoriesUrl = `${origin.replace(/\/$/, "")}/categories.md`;
+  const categoryCards = categories.length === 0
+    ? "<p>No categories are available yet.</p>"
+    : categories.map((category) => `
+        <a class="category-card" href="/${escapeHtml(category.slug)}/skill.md">
+          <strong>${escapeHtml(category.name)}</strong>
+          <span>${escapeHtml(category.summary)}</span>
+          <code>/${escapeHtml(category.slug)}/skill.md</code>
+        </a>
+      `).join("");
 
-  if (directoryVerticals.length === 0) {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escapeHtml(config.brandName)}</title>
+    <style>
+      body { margin: 0; font-family: monospace; background: #101216; color: #f4efe7; }
+      main { width: min(960px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0 48px; display: grid; gap: 24px; }
+      .hero, .panel { background: #171a20; border: 1px solid #2b303a; border-radius: 20px; padding: 24px; }
+      h1, h2 { margin: 0 0 12px; }
+      p { line-height: 1.6; color: #d3c9bb; }
+      .paths { display: grid; gap: 8px; margin-top: 16px; }
+      .paths code { display: block; padding: 10px 12px; background: #0f1217; border: 1px solid #2b303a; border-radius: 12px; color: #8ef2de; }
+      .grid { display: grid; gap: 12px; }
+      .category-card { display: grid; gap: 6px; padding: 16px; border: 1px solid #2b303a; border-radius: 16px; text-decoration: none; color: inherit; background: #0f1217; }
+      .category-card span { color: #d3c9bb; }
+      .category-card code { color: #8ef2de; }
+      @media (min-width: 720px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>${escapeHtml(config.brandName)}</h1>
+        <p>${escapeHtml(config.verticalSummary)}</p>
+        <p>The root introduces categories. Merchant discovery starts only after choosing one category.</p>
+        <div class="paths">
+          <code>Root skill: ${escapeHtml(skillUrl)}</code>
+          <code>Category index: ${escapeHtml(categoriesUrl)}</code>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Categories</h2>
+        <div class="grid">
+          ${categoryCards}
+        </div>
+      </section>
+    </main>
+  </body>
+</html>`;
+}
+
+function renderDirectoryCards(categories: CategoryDirectoryEntry[]): string {
+  if (categories.length === 0) {
     return `<p class="directory-empty muted">No categories are published yet.</p>`;
   }
 
-  return directoryVerticals.map((vertical) => {
-    const isCurrent = vertical.deployId === config.deployId;
-    const badge = isCurrent ? "current" : "open";
-    const subtitle = vertical.directorySubtitle || (vertical.verticalName ? `${vertical.verticalName} category` : "Live category");
-    const emoji = vertical.emoji || "🦞";
+  return [...categories]
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((category) => {
     return `
-      <a class="directory-card${isCurrent ? " is-active" : ""}" href="${vertical.url}">
-        <span class="directory-emoji">${emoji}</span>
+      <a class="directory-card" href="${category.skillPath}">
+        <span class="directory-emoji">🦞</span>
         <span class="directory-meta">
-          <strong>${vertical.brandName}</strong>
-          <span>${subtitle}</span>
+          <strong>${escapeHtml(category.name)}</strong>
+          <span>${escapeHtml(category.summary)}</span>
         </span>
-        <span class="directory-domain">${vertical.domain}</span>
-        <span class="directory-badge">${badge}</span>
+        <span class="directory-domain">${escapeHtml(category.slug)}</span>
+        <span class="directory-badge">open skill</span>
       </a>
     `;
   }).join("");
@@ -528,15 +768,16 @@ function renderFeaturedMerchantCards(featuredMerchants: FeaturedMerchantSummary[
   }).join("");
 }
 
-function renderLandingPage(
+function renderLegacyLandingPage(
   config: ReturnType<typeof readDeployConfig>,
   origin: string,
-  featuredMerchants: FeaturedMerchantSummary[]
+  featuredMerchants: FeaturedMerchantSummary[],
+  categories: CategoryDirectoryEntry[]
 ): string {
   const skillUrl = `${origin.replace(/\/$/, "")}/skill.md`;
-  const installInstruction = `Read ${skillUrl} and follow the instructions to browse the directory and connect to the right merchant MCP.`;
+  const installInstruction = `Read ${skillUrl} and follow the instructions to choose a category before browsing merchants.`;
   const contactEmail = "hello@lobsterstores.com";
-  const directoryCards = renderDirectoryCards(config);
+  const directoryCards = renderDirectoryCards(categories);
   const featuredCards = renderFeaturedMerchantCards(featuredMerchants);
   const featuredTab = featuredMerchants.length > 0
     ? '<button class="surface-tab" type="button" role="tab" aria-selected="false" data-surface-tab="featured">featured merchants</button>'
@@ -964,15 +1205,15 @@ function renderLandingPage(
             </div>
             <ol class="steps">
               <li><strong>1.</strong><span>Send this to your agent</span></li>
-              <li><strong>2.</strong><span>Let the agent read the skill and pick a merchant</span></li>
-              <li><strong>3.</strong><span>Then the agent can start shopping through the right merchant MCP</span></li>
+              <li><strong>2.</strong><span>Let the agent read the root skill and choose a category</span></li>
+              <li><strong>3.</strong><span>Then the agent can discover merchants through the category-specific skill</span></li>
             </ol>
           </section>
           ${featuredPanel}
           <section class="surface-panel" data-surface-panel="directory" role="tabpanel" hidden>
             <div class="directory-intro">
               <p class="prompt-title">All Lobster Categories</p>
-              <p class="muted">Browse every lobster category and find the right shop faster.</p>
+              <p class="muted">Pick a category first, then stay inside that namespace for discovery.</p>
             </div>
             <div class="directory-grid">
               ${directoryCards}

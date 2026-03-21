@@ -1,4 +1,4 @@
-import type { CountryArtifact, MerchantArtifact, OffersArtifact } from "./domain";
+import type { CategoriesArtifact, CountryArtifact, MerchantArtifact, OffersArtifact } from "./domain";
 import type { ArtifactStore } from "./storage";
 
 async function readJson<T>(bucket: R2Bucket, key: string): Promise<T | null> {
@@ -21,31 +21,39 @@ async function writeJson(bucket: R2Bucket, key: string, value: unknown): Promise
 export class R2ArtifactStore implements ArtifactStore {
   constructor(private readonly bucket: R2Bucket) {}
 
-  async getCountry(countryCode: string): Promise<CountryArtifact | null> {
-    return readJson<CountryArtifact>(this.bucket, `countries/${countryCode}.json`);
+  async getCategories(): Promise<CategoriesArtifact | null> {
+    return readJson<CategoriesArtifact>(this.bucket, "categories/index.json");
   }
 
-  async putCountry(artifact: CountryArtifact): Promise<void> {
-    await writeJson(this.bucket, `countries/${artifact.countryCode}.json`, artifact);
+  async putCategories(artifact: CategoriesArtifact): Promise<void> {
+    await writeJson(this.bucket, "categories/index.json", artifact);
   }
 
-  async getOffers(countryCode: string): Promise<OffersArtifact | null> {
-    return readJson<OffersArtifact>(this.bucket, `offers/${countryCode}.json`);
+  async getCategoryCountry(categorySlug: string, countryCode: string): Promise<CountryArtifact | null> {
+    return readJson<CountryArtifact>(this.bucket, `${categorySlug}/countries/${countryCode}.json`);
   }
 
-  async putOffers(artifact: OffersArtifact): Promise<void> {
-    await writeJson(this.bucket, `offers/${artifact.countryCode}.json`, artifact);
+  async putCategoryCountry(categorySlug: string, artifact: CountryArtifact): Promise<void> {
+    await writeJson(this.bucket, `${categorySlug}/countries/${artifact.countryCode}.json`, artifact);
   }
 
-  async getMerchant(slug: string): Promise<MerchantArtifact | null> {
-    return readJson<MerchantArtifact>(this.bucket, `merchants/${slug}.json`);
+  async getCategoryOffers(categorySlug: string, countryCode: string): Promise<OffersArtifact | null> {
+    return readJson<OffersArtifact>(this.bucket, `${categorySlug}/offers/${countryCode}.json`);
   }
 
-  async putMerchant(artifact: MerchantArtifact): Promise<void> {
-    await writeJson(this.bucket, `merchants/${artifact.slug}.json`, artifact);
+  async putCategoryOffers(categorySlug: string, artifact: OffersArtifact): Promise<void> {
+    await writeJson(this.bucket, `${categorySlug}/offers/${artifact.countryCode}.json`, artifact);
   }
 
-  async getSkill(): Promise<string | null> {
+  async getCategoryMerchant(categorySlug: string, slug: string): Promise<MerchantArtifact | null> {
+    return readJson<MerchantArtifact>(this.bucket, `${categorySlug}/merchants/${slug}.json`);
+  }
+
+  async putCategoryMerchant(categorySlug: string, artifact: MerchantArtifact): Promise<void> {
+    await writeJson(this.bucket, `${categorySlug}/merchants/${artifact.slug}.json`, artifact);
+  }
+
+  async getRootSkill(): Promise<string | null> {
     const object = await this.bucket.get("skill.md");
     if (!object) {
       return null;
@@ -54,12 +62,28 @@ export class R2ArtifactStore implements ArtifactStore {
     return object.text();
   }
 
-  async putSkill(skill: string): Promise<void> {
+  async putRootSkill(skill: string): Promise<void> {
     await this.bucket.put("skill.md", skill, {
       httpMetadata: {
         contentType: "text/markdown; charset=utf-8"
       }
     });
   }
-}
 
+  async getCategorySkill(categorySlug: string): Promise<string | null> {
+    const object = await this.bucket.get(`${categorySlug}/skill.md`);
+    if (!object) {
+      return null;
+    }
+
+    return object.text();
+  }
+
+  async putCategorySkill(categorySlug: string, skill: string): Promise<void> {
+    await this.bucket.put(`${categorySlug}/skill.md`, skill, {
+      httpMetadata: {
+        contentType: "text/markdown; charset=utf-8"
+      }
+    });
+  }
+}

@@ -1,5 +1,6 @@
 import type {
   Category,
+  CategoriesArtifact,
   Claw,
   CountryArtifact,
   CountryMerchantSummary,
@@ -35,41 +36,59 @@ import type {
 } from "./storage";
 
 export class MemoryArtifactStore implements ArtifactStore {
+  private categories: CategoriesArtifact | null = null;
   private readonly countries = new Map<string, CountryArtifact>();
   private readonly offers = new Map<string, OffersArtifact>();
   private readonly merchants = new Map<string, MerchantArtifact>();
-  private skill: string | null = null;
+  private rootSkill: string | null = null;
+  private readonly categorySkills = new Map<string, string>();
 
-  async getCountry(countryCode: string): Promise<CountryArtifact | null> {
-    return this.countries.get(countryCode) ?? null;
+  async getCategories(): Promise<CategoriesArtifact | null> {
+    return this.categories;
   }
 
-  async putCountry(artifact: CountryArtifact): Promise<void> {
-    this.countries.set(artifact.countryCode, artifact);
+  async putCategories(artifact: CategoriesArtifact): Promise<void> {
+    this.categories = artifact;
   }
 
-  async getOffers(countryCode: string): Promise<OffersArtifact | null> {
-    return this.offers.get(countryCode) ?? null;
+  async getCategoryCountry(categorySlug: string, countryCode: string): Promise<CountryArtifact | null> {
+    return this.countries.get(`${categorySlug}:${countryCode}`) ?? null;
   }
 
-  async putOffers(artifact: OffersArtifact): Promise<void> {
-    this.offers.set(artifact.countryCode, artifact);
+  async putCategoryCountry(categorySlug: string, artifact: CountryArtifact): Promise<void> {
+    this.countries.set(`${categorySlug}:${artifact.countryCode}`, artifact);
   }
 
-  async getMerchant(slug: string): Promise<MerchantArtifact | null> {
-    return this.merchants.get(slug) ?? null;
+  async getCategoryOffers(categorySlug: string, countryCode: string): Promise<OffersArtifact | null> {
+    return this.offers.get(`${categorySlug}:${countryCode}`) ?? null;
   }
 
-  async putMerchant(artifact: MerchantArtifact): Promise<void> {
-    this.merchants.set(artifact.slug, artifact);
+  async putCategoryOffers(categorySlug: string, artifact: OffersArtifact): Promise<void> {
+    this.offers.set(`${categorySlug}:${artifact.countryCode}`, artifact);
   }
 
-  async getSkill(): Promise<string | null> {
-    return this.skill;
+  async getCategoryMerchant(categorySlug: string, slug: string): Promise<MerchantArtifact | null> {
+    return this.merchants.get(`${categorySlug}:${slug}`) ?? null;
   }
 
-  async putSkill(skill: string): Promise<void> {
-    this.skill = skill;
+  async putCategoryMerchant(categorySlug: string, artifact: MerchantArtifact): Promise<void> {
+    this.merchants.set(`${categorySlug}:${artifact.slug}`, artifact);
+  }
+
+  async getRootSkill(): Promise<string | null> {
+    return this.rootSkill;
+  }
+
+  async putRootSkill(skill: string): Promise<void> {
+    this.rootSkill = skill;
+  }
+
+  async getCategorySkill(categorySlug: string): Promise<string | null> {
+    return this.categorySkills.get(categorySlug) ?? null;
+  }
+
+  async putCategorySkill(categorySlug: string, skill: string): Promise<void> {
+    this.categorySkills.set(categorySlug, skill);
   }
 }
 

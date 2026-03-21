@@ -177,6 +177,8 @@ export interface RootSurfaceMerchantOnboarding {
   ctaHref?: string;
   note?: string;
   bullets?: string[];
+  supportLinks?: RootSurfaceLink[];
+  footerLines?: string[];
 }
 
 export interface RootSurfaceConfig {

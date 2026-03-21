@@ -94,6 +94,12 @@ function parseMerchantOnboarding(value: unknown): RootSurfaceConfig["merchantOnb
   const bullets = Array.isArray(record.bullets)
     ? record.bullets.map((entry) => parseString(entry)).filter((entry): entry is string => Boolean(entry))
     : undefined;
+  const supportLinks = Array.isArray(record.supportLinks)
+    ? record.supportLinks.map((entry) => parseLink(entry)).filter((entry): entry is RootSurfaceLink => Boolean(entry))
+    : undefined;
+  const footerLines = Array.isArray(record.footerLines)
+    ? record.footerLines.map((entry) => parseString(entry)).filter((entry): entry is string => Boolean(entry))
+    : undefined;
 
   if (
     !title
@@ -102,6 +108,8 @@ function parseMerchantOnboarding(value: unknown): RootSurfaceConfig["merchantOnb
     && !ctaLabel
     && !note
     && (!bullets || bullets.length === 0)
+    && (!supportLinks || supportLinks.length === 0)
+    && (!footerLines || footerLines.length === 0)
   ) {
     return undefined;
   }
@@ -112,7 +120,9 @@ function parseMerchantOnboarding(value: unknown): RootSurfaceConfig["merchantOnb
     ctaHref,
     ctaLabel,
     note,
-    bullets: bullets && bullets.length > 0 ? bullets : undefined
+    bullets: bullets && bullets.length > 0 ? bullets : undefined,
+    supportLinks: supportLinks && supportLinks.length > 0 ? supportLinks : undefined,
+    footerLines: footerLines && footerLines.length > 0 ? footerLines : undefined
   };
 }
 

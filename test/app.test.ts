@@ -186,34 +186,51 @@ describe("lobsterbazaar worker", () => {
           }
         ],
         rootSurface: {
-          sectionOrder: ["hero", "categories", "network", "merchant_onboarding"],
+          sectionOrder: ["hero", "categories", "merchant_onboarding"],
           hero: {
             eyebrow: "discovery for OpenClaw and AI shoppers",
-            title: "Help OpenClaw discover the right Shopify store.",
-            body: "Lobster Stores is a category-first directory. Start with a category, stay in that namespace, and keep merchant onboarding secondary.",
+            title: "Discover Shopify stores by category.",
+            body: "Lobster Stores helps OpenClaw and other AI shoppers browse Shopify merchants by category, move through one discovery lane at a time, and hand off to merchant checkout when the fit is clear.",
             primaryCta: {
-              label: "Browse categories",
-              href: "#categories"
+              label: "> install the skill",
+              href: "#install"
             },
             secondaryCta: {
-              label: "Merchant onboarding",
-              href: "#merchant-onboarding"
+              label: "> browse merchants",
+              href: "#directory"
+            },
+            tertiaryCta: {
+              label: "> register your store",
+              href: "#register"
             }
           },
           categories: {
             title: "Categories",
-            body: "Every category gets its own skill and merchant discovery lane."
+            body: "Start with a category, open its skill, then browse countries, merchants, and connect prompts inside that lane."
           },
           categoryOrder: ["coffee", "bread"],
           merchantOnboarding: {
-            title: "Own a Shopify store?",
-            body: "Install the Shopify app to create or manage your merchant listing.",
-            ctaLabel: "Install the Shopify app",
+            title: "Merchant onboarding",
+            body: "Install the Shopify app to create your listing.",
+            ctaLabel: "Install Lobster Stores from the Shopify App Store",
             ctaHref: "https://apps.shopify.com/store-agent-kit",
-            note: "Merchant onboarding stays at the bottom so discovery remains primary.",
+            note: "Merchant setup lives below the directory so discovery stays first.",
             bullets: [
-              "Create a merchant listing from the app.",
-              "Keep your Shopify store connected for future discovery."
+              "Create your merchant listing in the app after installation.",
+              "Request verification for an existing listing from the app."
+            ],
+            supportLinks: [
+              {
+                label: "source code on GitHub",
+                href: "https://github.com/abuiles/lobsterbazaar"
+              },
+              {
+                label: "built by @abuiles",
+                href: "https://x.com/abuiles"
+              }
+            ],
+            footerLines: [
+              "made for claws, shoppers, and merchants"
             ]
           }
         }
@@ -227,17 +244,23 @@ describe("lobsterbazaar worker", () => {
     const body = await response.text();
 
     expect(response.status).toBe(200);
-    expect(body).toContain("Help OpenClaw discover the right Shopify store.");
-    expect(body).toContain("Browse categories");
+    expect(body).toContain("Discover Shopify stores by category.");
+    expect(body).toContain("install the skill");
+    expect(body).toContain("browse merchants");
+    expect(body).toContain("register your store");
     expect(body).toContain("Merchant onboarding");
-    expect(body).toContain("Own a Shopify store?");
-    expect(body).toContain("Install the Shopify app");
+    expect(body).toContain("Install the Shopify app to create your listing.");
+    expect(body).toContain("Install Lobster Stores from the Shopify App Store");
+    expect(body).toContain("light mode");
+    expect(body).toContain("Send your agent to Lobster Stores.");
     expect(body).toContain("/assets/mascots/lobsterbrew-mascot.jpg");
     expect(body).toContain("/assets/mascots/lobsterbread-mascot-v2.jpg");
     expect(body).toContain("coffee, roasters, cafes");
     expect(body).toContain("bread, bakeries, pastries");
-    expect(body).toContain("Lobster Brew");
-    expect(body).toContain("Lobster Bread");
+    expect(body).toContain("source code on GitHub");
+    expect(body).toContain("built by @abuiles");
+    expect(body).toContain("made for claws, shoppers, and merchants");
+    expect(body).not.toContain("Lobster network");
     expect(body).not.toContain("verified listing");
   });
 

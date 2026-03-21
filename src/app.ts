@@ -73,6 +73,10 @@ interface RootSurfaceHeroConfig {
     label: string;
     href: string;
   };
+  tertiaryCta?: {
+    label: string;
+    href: string;
+  };
 }
 
 interface RootSurfaceNetworkEntry {
@@ -109,6 +113,11 @@ interface RootSurfaceConfig {
     ctaHref?: string;
     note?: string;
     bullets?: string[];
+    supportLinks?: Array<{
+      label: string;
+      href: string;
+    }>;
+    footerLines?: string[];
   };
 }
 
@@ -901,31 +910,39 @@ function renderRootSurfaceLandingPage(
   const featuredMax = surface.featured?.maxItems ?? 4;
   const featuredList = featuredMerchants.slice(0, featuredMax);
   const sectionOrder = readSectionOrder(surface);
+  const sections = new Set(sectionOrder);
+  const heroTitle = hero.title ?? "Discover Shopify stores by category.";
+  const heroBody = hero.body ?? "Lobster Stores helps OpenClaw and other AI shoppers browse Shopify merchants by category, move through one discovery lane at a time, and hand off to merchant checkout when the fit is clear.";
+  const heroEyebrow = hero.eyebrow ?? "discovery for OpenClaw and AI shoppers";
+  const heroPrimary = hero.primaryCta ?? { label: "> install the skill", href: "#install" };
+  const heroSecondary = hero.secondaryCta ?? { label: "> browse merchants", href: "#directory" };
+  const heroTertiary = hero.tertiaryCta ?? { label: "> register your store", href: "#register" };
+  const categoriesTitle = surface.categories?.title ?? "Categories";
+  const categoriesBody = surface.categories?.body ?? "Start with a category, open its skill, then browse countries, merchants, and connect prompts inside that lane.";
+  const categoriesEmpty = surface.categories?.emptyMessage ?? "No categories are available yet.";
+  const onboardingTitle = merchantOnboarding.title ?? "Merchant onboarding";
+  const onboardingBody = merchantOnboarding.body ?? "Install the Shopify app to create your listing.";
+  const onboardingCtaLabel = merchantOnboarding.ctaLabel ?? "Install Lobster Stores from the Shopify App Store";
+  const onboardingCtaHref = merchantOnboarding.ctaHref ?? "https://apps.shopify.com/store-agent-kit";
+  const onboardingNote = merchantOnboarding.note ?? "Merchant setup lives below the directory so discovery stays first.";
+  const onboardingBullets = merchantOnboarding.bullets ?? [
+    "Create your merchant listing in the app after installation.",
+    "Request verification for an existing listing from the app.",
+    "Share your Shopify store URL, category, merchant details, and what makes your business a fit inside the app.",
+    "Verification helps OpenClaw agents and AI shoppers trust your listing faster."
+  ];
+  const onboardingSupportLinks = merchantOnboarding.supportLinks ?? [
+    { label: "source code on GitHub", href: "https://github.com/abuiles/lobsterbazaar" },
+    { label: "built by @abuiles", href: "https://x.com/abuiles" }
+  ];
+  const onboardingFooterLines = merchantOnboarding.footerLines ?? ["made for claws, shoppers, and merchants"];
+  const installInstruction = `Read ${skillUrl} and use it to browse the Lobster Stores directory of Shopify merchants by category. Help shoppers discover merchants, compare stores, and connect to the right Shopify storefront.`;
   const networkEntries = surface.network?.entries ?? config.directoryVerticals.map((entry) => ({
     brandName: entry.brandName,
     href: entry.url,
     subtitle: entry.directorySubtitle ?? entry.verticalName ?? "",
     emoji: entry.emoji ?? "🦞"
   }));
-  const sections = new Set(sectionOrder);
-  const heroTitle = hero.title ?? "Help OpenClaw discover the right Shopify store.";
-  const heroBody = hero.body ?? "Lobster Stores is a category-first directory for AI shoppers. Start with a category, stay in that namespace, and hand merchant discovery off only when the agent has enough context.";
-  const heroEyebrow = hero.eyebrow ?? "discovery for OpenClaw and AI shoppers";
-  const heroPrimary = hero.primaryCta ?? { label: "Browse categories", href: "#categories" };
-  const heroSecondary = hero.secondaryCta ?? { label: "Merchant onboarding", href: "#merchant-onboarding" };
-  const categoriesTitle = surface.categories?.title ?? "Categories";
-  const categoriesBody = surface.categories?.body ?? "Each category is its own discovery lens with a dedicated skill, country index, and merchant handoff.";
-  const categoriesEmpty = surface.categories?.emptyMessage ?? "No categories are available yet.";
-  const onboardingTitle = merchantOnboarding.title ?? "Own a Shopify store?";
-  const onboardingBody = merchantOnboarding.body ?? "Install the Shopify app to create or manage your merchant listing, then come back when you want buyers and agents to discover it from the directory.";
-  const onboardingCtaLabel = merchantOnboarding.ctaLabel ?? "Install the Shopify app";
-  const onboardingCtaHref = merchantOnboarding.ctaHref ?? "https://apps.shopify.com/store-agent-kit";
-  const onboardingNote = merchantOnboarding.note ?? "Merchant onboarding stays at the bottom so discovery remains the primary experience.";
-  const onboardingBullets = merchantOnboarding.bullets ?? [
-    "Create a merchant listing from the app.",
-    "Keep your Shopify store connected for future discovery.",
-    "Use the directory as the public storefront for agent shoppers."
-  ];
 
   const categoryMarkup = categoryCards.length === 0
     ? `<p class="surface-empty">${escapeHtml(categoriesEmpty)}</p>`
@@ -957,7 +974,7 @@ function renderRootSurfaceLandingPage(
 
   const featuredMarkup = sections.has("featured") && featuredList.length > 0
     ? `
-      <section class="surface-panel" id="featured">
+      <section class="panel surface-panel" id="featured">
         <div class="surface-section-heading">
           <div>
             <p class="surface-kicker">featured merchants</p>
@@ -974,7 +991,7 @@ function renderRootSurfaceLandingPage(
 
   const networkMarkup = sections.has("network") && networkEntries.length > 0
     ? `
-      <section class="surface-panel" id="network">
+      <section class="panel surface-panel" id="network">
         <div class="surface-section-heading">
           <div>
             <p class="surface-kicker">network</p>
@@ -1000,7 +1017,7 @@ function renderRootSurfaceLandingPage(
 
   const onboardingMarkup = sections.has("merchant_onboarding")
     ? `
-      <section class="surface-panel surface-onboarding" id="merchant-onboarding">
+      <section class="panel surface-panel surface-onboarding" id="register">
         <div class="surface-section-heading">
           <div>
             <p class="surface-kicker">merchant onboarding</p>
@@ -1009,11 +1026,41 @@ function renderRootSurfaceLandingPage(
           <p>${escapeHtml(onboardingBody)}</p>
         </div>
         <div class="surface-onboarding__content">
-          <a class="surface-onboarding__cta" href="${escapeHtml(onboardingCtaHref)}">${escapeHtml(onboardingCtaLabel)}</a>
-          <p class="surface-onboarding__note">${escapeHtml(onboardingNote)}</p>
-          <ul class="surface-onboarding__bullets">
-            ${onboardingBullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}
-          </ul>
+          <div class="surface-onboarding__lead">
+            <a class="surface-onboarding__cta" href="${escapeHtml(onboardingCtaHref)}">${escapeHtml(onboardingCtaLabel)}</a>
+            <p class="surface-onboarding__note">${escapeHtml(onboardingNote)}</p>
+          </div>
+          <div class="surface-onboarding__details">
+            <ul class="surface-onboarding__bullets">
+              ${onboardingBullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}
+            </ul>
+            <ul class="surface-onboarding__links">
+              ${onboardingSupportLinks.map((link) => `<li><a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a></li>`).join("")}
+            </ul>
+            <div class="surface-onboarding__footer">
+              ${onboardingFooterLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
+            </div>
+          </div>
+        </div>
+      </section>
+    `
+    : "";
+
+  const installMarkup = sections.has("hero")
+    ? `
+      <section class="panel surface-panel install-shell" id="install">
+        <div class="install-grid">
+          <div class="install-lead">
+            <p class="surface-kicker">install</p>
+            <h2>Send your agent to Lobster Stores.</h2>
+            <p class="install-copy">Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL and follow instructions. Start with the directory skill to discover Shopify stores by category, understand what they sell, and choose the right merchant lane.</p>
+          </div>
+          <article class="install-card">
+            <div class="prompt">
+              <button class="copy-button" type="button" data-copy-install>copy</button>
+              <pre data-install-instruction>${escapeHtml(installInstruction)}</pre>
+            </div>
+          </article>
         </div>
       </section>
     `
@@ -1021,7 +1068,7 @@ function renderRootSurfaceLandingPage(
 
   const heroMarkup = sections.has("hero")
     ? `
-      <section class="surface-hero">
+      <section class="hero panel surface-hero" id="top">
         <div class="surface-hero__copy">
           <p class="surface-kicker">${escapeHtml(heroEyebrow)}</p>
           <h1>${escapeHtml(heroTitle)}</h1>
@@ -1029,23 +1076,28 @@ function renderRootSurfaceLandingPage(
           <div class="surface-hero__ctas">
             <a class="surface-hero__cta surface-hero__cta--primary" href="${escapeHtml(heroPrimary.href)}">${escapeHtml(heroPrimary.label)}</a>
             <a class="surface-hero__cta surface-hero__cta--secondary" href="${escapeHtml(heroSecondary.href)}">${escapeHtml(heroSecondary.label)}</a>
+            <a class="surface-hero__cta surface-hero__cta--ghost" href="${escapeHtml(heroTertiary.href)}">${escapeHtml(heroTertiary.label)}</a>
           </div>
-          <div class="surface-quick-links">
-            <a href="${escapeHtml(skillUrl)}">Root skill</a>
-            <a href="${escapeHtml(categoriesUrl)}">Category index</a>
+          <div class="surface-hero__note">
+            Focus on one category at a time. Discovery starts here; merchant setup and about details stay at the bottom.
           </div>
         </div>
         <div class="surface-hero__panel">
           <div class="surface-hero__panel-inner">
             <div>
-              <p class="surface-kicker">directory surface</p>
-              <h2>${escapeHtml(categoriesTitle)}</h2>
-              <p>${escapeHtml(categoriesBody)}</p>
+              <p class="surface-kicker">discovery flow</p>
+              <h2>Discover Shopify stores across the lobster map.</h2>
+              <p>Use the root to pick a category, then let your agent browse countries, merchants, and connect prompts without losing context.</p>
             </div>
-            <div class="surface-hero__stats">
-              <span>${escapeHtml(String(categories.length))} categories</span>
-              <span>${escapeHtml(String(config.directoryVerticals.length))} network entries</span>
-              <span>single-instance directory</span>
+            <ol class="surface-flow-list">
+              <li><strong>1.</strong><span>Browse categories.</span></li>
+              <li><strong>2.</strong><span>Open a category skill.</span></li>
+              <li><strong>3.</strong><span>Browse countries and merchants.</span></li>
+              <li><strong>4.</strong><span>Use merchant connect for MCP handoff.</span></li>
+            </ol>
+            <div class="surface-quick-links">
+              <a href="${escapeHtml(categoriesUrl)}">Category index</a>
+              <a href="${escapeHtml(skillUrl)}">Root skill</a>
             </div>
           </div>
         </div>
@@ -1055,11 +1107,11 @@ function renderRootSurfaceLandingPage(
 
   const categoriesMarkup = sections.has("categories")
     ? `
-      <section class="surface-panel surface-categories" id="categories">
+      <section class="panel surface-panel surface-categories" id="directory">
         <div class="surface-section-heading">
           <div>
-            <p class="surface-kicker">categories</p>
-            <h2>${escapeHtml(categoriesTitle)}</h2>
+            <p class="surface-kicker">directory</p>
+            <h2>Discover Shopify stores by category.</h2>
           </div>
           <p>${escapeHtml(categoriesBody)}</p>
         </div>
@@ -1072,7 +1124,7 @@ function renderRootSurfaceLandingPage(
 
   const sectionMarkup = sectionOrder.map((section) => {
     if (section === "hero") {
-      return heroMarkup;
+      return `${heroMarkup}${installMarkup}`;
     }
 
     if (section === "categories") {
@@ -1099,121 +1151,244 @@ function renderRootSurfaceLandingPage(
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>${escapeHtml(config.brandName)}</title>
+    <title>${escapeHtml(config.brandName)}: Discover Shopify stores by category</title>
+    <meta name="color-scheme" content="dark light">
+    <meta name="description" content="${escapeHtml(heroBody)}">
     <style>
       :root {
-        color-scheme: dark light;
-        --bg: #12110f;
-        --bg-soft: rgba(202, 165, 104, 0.12);
-        --panel: rgba(20, 18, 16, 0.88);
-        --panel-strong: #1d1a16;
-        --ink: #f5f0e6;
-        --muted: #b6ab9b;
-        --line: rgba(255, 255, 255, 0.1);
-        --accent: #e8c48b;
-        --accent-strong: #ffdfb4;
-        --shadow: 0 32px 80px rgba(0, 0, 0, 0.34);
+        color-scheme: dark;
+        --bg: #0a0a0a;
+        --bg-top: rgba(196, 159, 106, 0.1);
+        --bg-start: #090909;
+        --bg-mid: #0a0a0a;
+        --bg-end: #080808;
+        --panel: #101010;
+        --panel-strong: #16130f;
+        --ink: #ece5d7;
+        --muted: #9f9687;
+        --line: #2c2720;
+        --line-soft: rgba(236, 229, 215, 0.08);
+        --accent: #f4ede0;
+        --accent-dim: #c49f6a;
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+        --grid-horizontal: rgba(255, 255, 255, 0.02);
+        --grid-vertical: rgba(255, 255, 255, 0.018);
+        --grid-mask: rgba(0, 0, 0, 0.38);
+        --surface-overlay-top: rgba(255, 255, 255, 0.022);
+        --surface-overlay-bottom: rgba(255, 255, 255, 0.006);
+        --hero-card-tint: rgba(196, 159, 106, 0.1);
+        --hero-card-fade: rgba(196, 159, 106, 0);
       }
       @media (prefers-color-scheme: light) {
         :root {
-          --bg: #f3ede1;
-          --bg-soft: rgba(184, 131, 58, 0.1);
-          --panel: rgba(255, 252, 247, 0.92);
-          --panel-strong: #fffaf1;
-          --ink: #1d1711;
-          --muted: #675c52;
-          --line: rgba(34, 28, 22, 0.12);
-          --accent: #9a6b30;
-          --accent-strong: #5d3e1a;
-          --shadow: 0 24px 64px rgba(80, 57, 29, 0.1);
+          color-scheme: light;
+          --bg: #f4efe6;
+          --bg-top: rgba(183, 126, 58, 0.12);
+          --bg-start: #fbf7f1;
+          --bg-mid: #f4efe6;
+          --bg-end: #ece3d4;
+          --panel: rgba(255, 251, 245, 0.86);
+          --panel-strong: #f6efe3;
+          --ink: #241b13;
+          --muted: #6e6257;
+          --line: rgba(92, 70, 44, 0.18);
+          --line-soft: rgba(92, 70, 44, 0.1);
+          --accent: #2c2016;
+          --accent-dim: #9b6d38;
+          --shadow: 0 24px 70px rgba(88, 61, 28, 0.1);
+          --grid-horizontal: rgba(61, 39, 15, 0.05);
+          --grid-vertical: rgba(61, 39, 15, 0.035);
+          --grid-mask: rgba(255, 255, 255, 0.08);
+          --surface-overlay-top: rgba(255, 255, 255, 0.7);
+          --surface-overlay-bottom: rgba(255, 255, 255, 0.38);
+          --hero-card-tint: rgba(183, 126, 58, 0.12);
+          --hero-card-fade: rgba(183, 126, 58, 0);
         }
       }
-      * { box-sizing: border-box; }
-      html { scroll-behavior: smooth; }
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: #f4efe6;
+        --bg-top: rgba(183, 126, 58, 0.12);
+        --bg-start: #fbf7f1;
+        --bg-mid: #f4efe6;
+        --bg-end: #ece3d4;
+        --panel: rgba(255, 251, 245, 0.86);
+        --panel-strong: #f6efe3;
+        --ink: #241b13;
+        --muted: #6e6257;
+        --line: rgba(92, 70, 44, 0.18);
+        --line-soft: rgba(92, 70, 44, 0.1);
+        --accent: #2c2016;
+        --accent-dim: #9b6d38;
+        --shadow: 0 24px 70px rgba(88, 61, 28, 0.1);
+        --grid-horizontal: rgba(61, 39, 15, 0.05);
+        --grid-vertical: rgba(61, 39, 15, 0.035);
+        --grid-mask: rgba(255, 255, 255, 0.08);
+        --surface-overlay-top: rgba(255, 255, 255, 0.7);
+        --surface-overlay-bottom: rgba(255, 255, 255, 0.38);
+        --hero-card-tint: rgba(183, 126, 58, 0.12);
+        --hero-card-fade: rgba(183, 126, 58, 0);
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
       body {
         margin: 0;
         min-height: 100vh;
         background:
-          radial-gradient(circle at top, var(--bg-soft), transparent 28%),
-          linear-gradient(180deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 85%, #000 15%) 100%);
+          radial-gradient(circle at top, var(--bg-top), transparent 30%),
+          linear-gradient(180deg, var(--bg-start) 0%, var(--bg-mid) 45%, var(--bg-end) 100%);
         color: var(--ink);
         font-family: "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace;
+        line-height: 1.6;
         -webkit-font-smoothing: antialiased;
         text-rendering: optimizeLegibility;
       }
-      a { color: inherit; }
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+          linear-gradient(var(--grid-horizontal) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid-vertical) 1px, transparent 1px);
+        background-size: 100% 32px, 32px 100%;
+        mask-image: linear-gradient(180deg, var(--grid-mask), transparent 88%);
+      }
+      a {
+        color: inherit;
+      }
       main {
-        width: min(1120px, calc(100% - 32px));
+        width: min(1080px, calc(100% - 32px));
         margin: 0 auto;
-        padding: 24px 0 56px;
+        padding: 20px 0 64px;
         display: grid;
         gap: 18px;
+      }
+      .topbar,
+      .panel {
+        border: 1px solid var(--line);
+        background: linear-gradient(180deg, var(--surface-overlay-top), var(--surface-overlay-bottom));
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(12px);
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 12px 14px;
+      }
+      .topbar-controls {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .brand {
+        color: var(--accent);
+        font-size: 0.96rem;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .nav {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .nav a,
+      .surface-quick-links a,
+      .surface-onboarding__links a {
+        color: var(--ink);
+        text-decoration: none;
+        transition:
+          color 160ms ease,
+          border-color 160ms ease,
+          transform 160ms ease,
+          background 160ms ease;
+      }
+      .nav a:hover,
+      .surface-quick-links a:hover,
+      .surface-onboarding__links a:hover {
+        color: var(--accent);
+      }
+      .theme-toggle {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--ink);
+        padding: 8px 10px;
+        font: inherit;
+        cursor: pointer;
+      }
+      .theme-toggle:hover {
+        border-color: var(--accent-dim);
       }
       .surface-hero,
       .surface-panel {
-        border: 1px solid var(--line);
-        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
-        box-shadow: var(--shadow);
-        backdrop-filter: blur(14px);
+        border-radius: 24px;
       }
-      .surface-hero {
+      .hero {
         display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
         gap: 18px;
-        padding: 22px;
-        border-radius: 28px;
+        padding: 22px 18px;
+        align-items: stretch;
       }
-      @media (min-width: 920px) {
-        .surface-hero {
-          grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-          align-items: stretch;
+      @media (max-width: 860px) {
+        .hero {
+          grid-template-columns: 1fr;
         }
       }
-      .surface-hero__copy,
-      .surface-hero__panel-inner,
-      .surface-panel {
-        min-width: 0;
-      }
       .surface-hero__copy {
-        display: grid;
-        gap: 16px;
-        padding: 4px;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
       }
       .surface-hero__copy h1,
       .surface-section-heading h2 {
         margin: 0;
-        line-height: 1.02;
-        letter-spacing: -0.03em;
+        line-height: 1.04;
+        letter-spacing: -0.04em;
       }
       .surface-hero__copy h1 {
-        font-size: clamp(2.25rem, 4vw, 4.8rem);
-        max-width: 12ch;
+        font-size: clamp(34px, 7vw, 70px);
+        margin-bottom: 14px;
       }
       .surface-kicker {
         margin: 0;
         color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.12em;
-        font-size: 0.76rem;
+        font-size: 12px;
+        margin-bottom: 10px;
       }
       .surface-hero__body,
       .surface-section-heading p,
       .surface-onboarding__note {
         margin: 0;
         color: var(--muted);
-        line-height: 1.65;
       }
-      .surface-hero__ctas {
+      .surface-hero__body {
+        max-width: 60ch;
+      }
+      .surface-hero__ctas,
+      .surface-quick-links {
         display: flex;
         flex-wrap: wrap;
-        gap: 10px;
+        gap: 12px;
       }
       .surface-hero__cta,
       .surface-onboarding__cta {
         display: inline-flex;
         align-items: center;
-        justify-content: center;
-        padding: 12px 16px;
-        border-radius: 999px;
+        gap: 8px;
+        padding: 10px 12px;
         text-decoration: none;
         border: 1px solid var(--line);
         transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
@@ -1227,56 +1402,66 @@ function renderRootSurfaceLandingPage(
       }
       .surface-hero__cta--primary,
       .surface-onboarding__cta {
+        color: var(--bg);
         background: var(--accent);
-        color: #20160d;
-        border-color: transparent;
+        border-color: var(--accent);
       }
-      .surface-hero__cta--secondary {
-        background: rgba(255,255,255,0.03);
+      .surface-hero__cta--primary:hover,
+      .surface-onboarding__cta:hover {
+        color: var(--bg);
+        opacity: 0.94;
       }
-      .surface-quick-links {
-        display: flex;
-        gap: 16px;
-        flex-wrap: wrap;
+      .surface-hero__cta--secondary,
+      .surface-hero__cta--ghost {
+        background: var(--panel);
+      }
+      .surface-hero__note {
+        margin-top: 18px;
+        max-width: 54ch;
         color: var(--muted);
       }
       .surface-quick-links a {
-        text-decoration: none;
-        border-bottom: 1px solid transparent;
-      }
-      .surface-quick-links a:hover {
-        border-color: currentColor;
+        color: var(--muted);
       }
       .surface-hero__panel {
-        border-radius: 22px;
-        overflow: hidden;
-        border: 1px solid var(--line);
+        padding: 28px;
         background:
-          radial-gradient(circle at top right, rgba(255, 223, 180, 0.22), transparent 38%),
-          linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+          linear-gradient(180deg, var(--hero-card-tint), var(--hero-card-fade)),
+          linear-gradient(180deg, var(--surface-overlay-top), var(--surface-overlay-bottom));
       }
       .surface-hero__panel-inner {
         display: grid;
-        gap: 20px;
-        padding: 18px;
+        align-content: start;
+        gap: 16px;
+        padding-right: 6px;
       }
       .surface-hero__panel-inner h2 {
-        margin: 8px 0 10px;
-        font-size: clamp(1.4rem, 2.3vw, 2rem);
+        margin: 0;
+        max-width: 14ch;
+        font-size: clamp(1.6rem, 2.2vw, 2.35rem);
+        line-height: 1.02;
+        letter-spacing: -0.045em;
       }
-      .surface-hero__stats {
+      .surface-flow-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
         display: grid;
-        gap: 10px;
-        margin-top: auto;
+        gap: 8px;
       }
-      .surface-hero__stats span,
-      .surface-category-card__action span:last-child,
-      .surface-network-card__href {
+      .surface-flow-list li {
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
         color: var(--muted);
       }
+      .surface-flow-list strong {
+        color: var(--accent-dim);
+        min-width: 1.4em;
+      }
       .surface-panel {
-        border-radius: 24px;
         padding: 20px;
+        min-width: 0;
       }
       .surface-section-heading {
         display: flex;
@@ -1320,19 +1505,18 @@ function renderRootSurfaceLandingPage(
         color: inherit;
         text-decoration: none;
         border: 1px solid var(--line);
-        border-radius: 20px;
-        background: var(--panel-strong);
-        overflow: hidden;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.02);
       }
       .surface-category-card {
         display: grid;
-        gap: 14px;
+        gap: 12px 14px;
         padding: 14px;
-        grid-template-rows: auto 1fr auto;
+        align-items: center;
       }
       .surface-category-card__art {
-        aspect-ratio: 16 / 10;
-        border-radius: 16px;
+        aspect-ratio: 4 / 3;
+        border-radius: 14px;
         overflow: hidden;
         background: rgba(255,255,255,0.04);
       }
@@ -1344,55 +1528,47 @@ function renderRootSurfaceLandingPage(
       }
       .surface-category-card__body {
         display: grid;
-        gap: 8px;
+        gap: 4px;
       }
       .surface-category-card__body strong {
-        font-size: 1.08rem;
+        font-size: 1rem;
       }
       .surface-category-card__eyebrow,
       .surface-category-card__subtitle {
         color: var(--muted);
-        line-height: 1.5;
+        font-size: 0.94rem;
       }
       .surface-category-card__eyebrow {
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        font-size: 0.74rem;
+        font-size: 0.8rem;
       }
       .surface-category-card__action {
         display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
       }
       .surface-category-card__action span:first-child {
-        color: var(--accent);
+        color: var(--muted);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 3px 8px;
+        font-size: 0.8rem;
       }
-      .surface-network-card {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 12px;
-        padding: 14px;
-        align-items: center;
-      }
-      .surface-network-card__emoji {
-        width: 44px;
-        height: 44px;
-        display: grid;
-        place-items: center;
-        border-radius: 14px;
-        background: rgba(255,255,255,0.04);
-      }
-      .surface-network-card__body {
-        display: grid;
-        gap: 4px;
-      }
-      .surface-network-card__body span {
+      .surface-category-card__action span:last-child {
         color: var(--muted);
       }
-      .surface-network-card__href {
-        grid-column: 1 / -1;
-        font-size: 0.84rem;
+      .surface-featured-card {
+        display: grid;
+        gap: 6px;
+        padding: 14px 16px;
+      }
+      .featured-domain,
+      .featured-summary,
+      .featured-description,
+      .featured-offers {
+        color: var(--muted);
+      }
+      .featured-offers {
+        color: var(--accent-dim);
       }
       .surface-onboarding {
         display: grid;
@@ -1400,26 +1576,121 @@ function renderRootSurfaceLandingPage(
       }
       .surface-onboarding__content {
         display: grid;
-        gap: 14px;
+        gap: 18px;
         padding-top: 4px;
+      }
+      @media (min-width: 860px) {
+        .surface-onboarding__content {
+          grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+        }
+      }
+      .surface-onboarding__lead {
+        display: grid;
+        align-content: start;
+        gap: 14px;
+      }
+      .surface-onboarding__details {
+        display: grid;
+        gap: 18px;
       }
       .surface-onboarding__bullets {
         margin: 0;
-        padding-left: 18px;
+        padding-left: 20px;
         color: var(--muted);
         display: grid;
         gap: 8px;
+      }
+      .surface-onboarding__links {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 10px;
+      }
+      .surface-onboarding__footer {
+        display: grid;
+        gap: 6px;
+      }
+      .surface-onboarding__footer p {
+        margin: 0;
+        color: var(--muted);
       }
       .surface-empty {
         margin: 0;
         color: var(--muted);
       }
+      @media (max-width: 640px) {
+        .topbar {
+          align-items: start;
+        }
+        .topbar-controls {
+          width: 100%;
+          justify-content: space-between;
+        }
+        .nav {
+          gap: 10px;
+        }
+      }
     </style>
   </head>
   <body>
     <main>
+      <header class="topbar">
+        <a class="brand" href="#top">[ ${escapeHtml(config.brandName)} ]</a>
+        <div class="topbar-controls">
+          <nav class="nav" aria-label="Primary">
+            <a href="#install">install</a>
+            <a href="#directory">directory</a>
+            <a href="#register">register</a>
+          </nav>
+          <button class="theme-toggle" type="button" data-theme-toggle>light mode</button>
+        </div>
+      </header>
       ${sectionMarkup}
     </main>
+    <script>
+      (() => {
+        const root = document.documentElement;
+        const button = document.querySelector("[data-theme-toggle]");
+        const copyButton = document.querySelector("[data-copy-install]");
+        const installInstruction = document.querySelector("[data-install-instruction]");
+        const storageKey = "lobster-stores-theme";
+        const savedTheme = localStorage.getItem(storageKey);
+        const syncButtonLabel = () => {
+          if (!button) {
+            return;
+          }
+          const currentTheme = root.dataset.theme === "light" ? "light" : "dark";
+          button.textContent = currentTheme === "light" ? "dark mode" : "light mode";
+        };
+        if (savedTheme === "light" || savedTheme === "dark") {
+          root.dataset.theme = savedTheme;
+        }
+        syncButtonLabel();
+        if (button) {
+          button.addEventListener("click", () => {
+            const nextTheme = root.dataset.theme === "light" ? "dark" : "light";
+            root.dataset.theme = nextTheme;
+            localStorage.setItem(storageKey, nextTheme);
+            syncButtonLabel();
+          });
+        }
+        if (copyButton && installInstruction) {
+          copyButton.addEventListener("click", async () => {
+            const original = copyButton.textContent || "copy";
+            try {
+              await navigator.clipboard.writeText(installInstruction.textContent || "");
+              copyButton.textContent = "copied";
+            } catch {
+              copyButton.textContent = "copy failed";
+            }
+            setTimeout(() => {
+              copyButton.textContent = original;
+            }, 1200);
+          });
+        }
+      })();
+    </script>
   </body>
 </html>`;
 }

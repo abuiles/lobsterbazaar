@@ -125,15 +125,15 @@ describe("lobsterbazaar worker", () => {
     expect(response.status).toBe(200);
     expect(body).toContain("Lobster Bazaar");
     expect(body).toContain("Coffee-oriented merchant discovery for lobsters.");
-    expect(body).toContain("Read https://lobsterbrew.test/skill.md and use it to browse the Lobster Bazaar directory of Shopify merchants.");
-    expect(body).toContain("send your agent to Lobster Bazaar.");
+    expect(body).toContain("Read https://lobsterbrew.test/skill.md and use Lobster Bazaar to help me discover and buy from Shopify merchants.");
+    expect(body).toContain("Use Lobster Bazaar with your agent.");
     expect(body).toContain("Browse the directory.");
     expect(body).toContain("Coffee");
     expect(body).toContain("Bread");
     expect(body).toContain("/coffee/skill.md");
     expect(body).toContain("/bread/skill.md");
-    expect(body).toContain("install the skill");
-    expect(body).toContain("browse merchants");
+    expect(body).toContain("copy agent prompt");
+    expect(body).toContain("browse categories");
     expect(body).toContain("light mode");
     expect(body).not.toContain("Featured Merchants");
     expect(body).not.toContain("source code on GitHub");
@@ -215,14 +215,14 @@ describe("lobsterbazaar worker", () => {
 
     expect(response.status).toBe(200);
     expect(body).toContain("Discover Shopify merchants with Lobster Stores.");
-    expect(body).toContain("install the skill");
-    expect(body).toContain("browse merchants");
+    expect(body).toContain("copy agent prompt");
+    expect(body).toContain("browse categories");
     expect(body).toContain("register your store");
     expect(body).toContain("Merchant onboarding");
     expect(body).toContain("Install the Shopify app to manage your listing.");
     expect(body).toContain("Install Lobster Stores from the Shopify App Store");
     expect(body).toContain("light mode");
-    expect(body).toContain("send your agent to Lobster Stores.");
+    expect(body).toContain("Use Lobster Stores with your agent.");
     expect(body).toContain("Read https://lobsterstores.com/skill.md");
     expect(body).toContain("/assets/mascots/lobsterbrew-mascot.jpg");
     expect(body).toContain("/assets/mascots/lobsterbread-mascot-v2.jpg");
@@ -397,8 +397,8 @@ describe("lobsterbazaar worker", () => {
     expect(response.status).toBe(200);
     expect(body).toContain("Discover Shopify merchants with Lobster Bazaar.");
     expect(body).toContain("Coffee-oriented merchant discovery for lobsters.");
-    expect(body).toContain("Read https://lobsterbrew.test/skill.md and use it to browse the Lobster Bazaar directory of Shopify merchants.");
-    expect(body).toContain("Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL and follow instructions.");
+    expect(body).toContain("Read https://lobsterbrew.test/skill.md and use Lobster Bazaar to help me discover and buy from Shopify merchants.");
+    expect(body).toContain("Built for OpenClaw, but it also works with Codex, Cursor, Claude Code, or any agent that can read a URL and follow instructions.");
     expect(body).toContain("Browse the directory.");
     expect(body).toContain("Bread");
     expect(body).toContain("coffee");

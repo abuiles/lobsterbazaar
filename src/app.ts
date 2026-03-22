@@ -676,7 +676,7 @@ function renderLandingPage(
       </section>
     `
     : "";
-  const installInstruction = `Read ${skillUrl} and use it to browse the ${config.brandName} directory of Shopify merchants. Explore the categories, compare merchants inside the right lane, and hand off to the right storefront when you are ready to shop.`;
+  const installInstruction = `Read ${skillUrl} and use ${config.brandName} to help me discover and buy from Shopify merchants. When I ask for something, choose the right category, compare relevant merchants, and bring me to the best storefront when you're ready.`;
 
   return `<!doctype html>
 <html lang="en">
@@ -994,8 +994,8 @@ function renderLandingPage(
           <h1>Discover Shopify merchants with ${escapeHtml(config.brandName)}.</h1>
           <p class="surface-hero__body">${escapeHtml(config.verticalSummary)}</p>
           <div class="surface-hero__ctas">
-            <a class="surface-hero__cta surface-hero__cta--primary" href="#install">install the skill</a>
-            <a class="surface-hero__cta surface-hero__cta--secondary" href="#directory">browse merchants</a>
+            <a class="surface-hero__cta surface-hero__cta--primary" href="#install">copy agent prompt</a>
+            <a class="surface-hero__cta surface-hero__cta--secondary" href="#directory">browse categories</a>
             ${heroRegisterLink}
           </div>
         </div>
@@ -1008,9 +1008,9 @@ function renderLandingPage(
       <section class="panel surface-panel install-shell" id="install">
         <div class="install-grid">
           <div class="install-lead">
-            <p class="surface-kicker">install</p>
-            <h2>send your agent to ${escapeHtml(config.brandName)}.</h2>
-            <p class="install-copy">Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL and follow instructions. Start with the directory skill to browse Shopify merchants, compare stores, and hand off to the right storefront when you are ready to shop.</p>
+            <p class="surface-kicker">agent prompt</p>
+            <h2>Use ${escapeHtml(config.brandName)} with your agent.</h2>
+            <p class="install-copy">Built for OpenClaw, but it also works with Codex, Cursor, Claude Code, or any agent that can read a URL and follow instructions. Keep it available as a shopping capability so your agent can choose the right category, compare Shopify merchants, and bring you to the best storefront when you're ready to buy.</p>
           </div>
           <article class="install-card">
             <div class="prompt">

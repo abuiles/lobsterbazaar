@@ -52,6 +52,7 @@ async function writeDeployPackage(
     categoriesJson?: string;
     merchantsCsv: string;
     offersJson?: string;
+    landingFooterMarkdown?: string;
   }
 ): Promise<void> {
   await mkdir(deployDir, { recursive: true });
@@ -68,6 +69,12 @@ async function writeDeployPackage(
     await writeFile(path.join(deployDir, "offers.json"), options.offersJson, "utf8");
   } else {
     await rm(path.join(deployDir, "offers.json"), { force: true });
+  }
+
+  if (typeof options.landingFooterMarkdown !== "undefined") {
+    await writeFile(path.join(deployDir, "landing_footer.md"), options.landingFooterMarkdown, "utf8");
+  } else {
+    await rm(path.join(deployDir, "landing_footer.md"), { force: true });
   }
 }
 
@@ -211,15 +218,7 @@ describe("deploy package loading", () => {
           ["deploy/config.json", JSON.stringify(createDeployConfig({
             vertical_id: undefined,
             vertical_name: undefined,
-            vertical_summary: undefined,
-            root_surface: {
-              sectionOrder: ["hero", "categories", "merchant_onboarding"],
-              merchantOnboarding: {
-                title: "Own a Shopify store?",
-                ctaLabel: "Install the Shopify app",
-                ctaHref: "https://apps.shopify.com/store-agent-kit"
-              }
-            }
+            vertical_summary: undefined
           }))],
           [
             "deploy/categories.json",
@@ -245,6 +244,10 @@ describe("deploy package loading", () => {
               "slug,display_name,store_url,country_codes,category_slugs,notes,claim_status,claim_contact",
               "sample-roaster,Sample Roaster,https://sample-roaster.com,US,coffee|bread,Known sample,claimed,hello@sample-roaster.com"
             ].join("\n")
+          ],
+          [
+            "deploy/landing_footer.md",
+            "# Merchant onboarding\n\nInstall the Shopify app to manage your listing."
           ]
         ])
       ),
@@ -257,7 +260,9 @@ describe("deploy package loading", () => {
     expect(deployPackage.categories[1]?.skillBuyingTargets).toBe("coffee beans and brewing gear");
     expect(deployPackage.merchants[0]?.categorySlugs).toEqual(["coffee", "bread"]);
     expect(deployPackage.config.directorySummary).toBe("Coffee directory");
-    expect(deployPackage.config.rootSurface?.merchantOnboarding?.ctaHref).toBe("https://apps.shopify.com/store-agent-kit");
+    expect(deployPackage.config.landingFooterMarkdown).toBe(
+      "# Merchant onboarding\n\nInstall the Shopify app to manage your listing."
+    );
   });
 
   it("rejects merchants that reference unknown categories", async () => {

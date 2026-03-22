@@ -123,84 +123,6 @@ export interface CategoryDirectoryEntry {
   countriesPath: string;
 }
 
-export type RootSurfaceSectionKind = "hero" | "categories" | "featured" | "network" | "merchant_onboarding";
-
-export interface RootSurfaceLink {
-  label: string;
-  href: string;
-}
-
-export interface RootSurfaceHero {
-  eyebrow?: string;
-  title?: string;
-  body?: string;
-  imageUrl?: string;
-  imageAlt?: string;
-  primaryCta?: RootSurfaceLink;
-  secondaryCta?: RootSurfaceLink;
-  tertiaryCta?: RootSurfaceLink;
-}
-
-export interface RootSurfaceSectionCopy {
-  title?: string;
-  body?: string;
-}
-
-export interface RootSurfaceCategoryCardConfig {
-  name?: string;
-  summary?: string;
-  subtitle?: string;
-  mascotUrl?: string;
-  badge?: string;
-  actionLabel?: string;
-  eyebrow?: string;
-  href?: string;
-}
-
-export interface RootSurfaceFeaturedConfig extends RootSurfaceSectionCopy {
-  maxItems?: number;
-}
-
-export interface RootSurfaceInstallConfig extends RootSurfaceSectionCopy {
-  prompt?: string;
-  primaryCta?: RootSurfaceLink;
-  secondaryCta?: RootSurfaceLink;
-}
-
-export interface RootSurfaceNetworkEntry {
-  brandName: string;
-  href: string;
-  subtitle?: string;
-  emoji?: string;
-}
-
-export interface RootSurfaceNetworkConfig extends RootSurfaceSectionCopy {
-  entries?: RootSurfaceNetworkEntry[];
-}
-
-export interface RootSurfaceMerchantOnboarding {
-  title?: string;
-  body?: string;
-  ctaLabel?: string;
-  ctaHref?: string;
-  note?: string;
-  bullets?: string[];
-  supportLinks?: RootSurfaceLink[];
-  footerLines?: string[];
-}
-
-export interface RootSurfaceConfig {
-  hero?: RootSurfaceHero;
-  sectionOrder?: RootSurfaceSectionKind[];
-  install?: RootSurfaceInstallConfig;
-  categories?: RootSurfaceSectionCopy;
-  categoryOrder?: string[];
-  categoryCards?: Record<string, RootSurfaceCategoryCardConfig>;
-  featured?: RootSurfaceFeaturedConfig;
-  network?: RootSurfaceNetworkConfig;
-  merchantOnboarding?: RootSurfaceMerchantOnboarding;
-}
-
 export interface MerchantConnectPayload {
   merchant: {
     name: string;
@@ -296,7 +218,7 @@ export interface DeployConfig {
   mascotUrl: string;
   emoji: string;
   directoryVerticals: DirectoryVertical[];
-  rootSurface?: RootSurfaceConfig;
+  landingFooterMarkdown?: string;
 }
 
 export interface DeployFileConfig {
@@ -308,7 +230,7 @@ export interface DeployFileConfig {
   skillBuyingTargets?: string;
   mascotUrl: string;
   emoji: string;
-  rootSurface?: RootSurfaceConfig;
+  landingFooterMarkdown?: string;
   defaultCountries: string[];
   publicDirectory: boolean;
   offersEnabled: boolean;

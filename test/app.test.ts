@@ -102,7 +102,7 @@ function lastMetricWrite(metrics: { writes: AnalyticsEngineDataPoint[] }): Analy
   return metric as AnalyticsEngineDataPoint;
 }
 
-class RootSurfaceRepositories extends MemoryRepositories {
+class LandingRepositories extends MemoryRepositories {
   override async listCategories() {
     const categories = await super.listCategories();
     return categories.map((category) => ({
@@ -116,30 +116,32 @@ class RootSurfaceRepositories extends MemoryRepositories {
 }
 
 describe("lobsterbazaar worker", () => {
-  it("renders the landing page with root category guidance", async () => {
+  it("renders the shared landing page with dynamic category cards", async () => {
     const { app } = await createTestHarness();
 
     const response = await app.fetch(new Request("https://lobsterbrew.test/"));
     const body = await response.text();
 
     expect(response.status).toBe(200);
-    expect(body).toContain(">Lobster Bazaar<");
+    expect(body).toContain("Lobster Bazaar");
     expect(body).toContain("Coffee-oriented merchant discovery for lobsters.");
-    expect(body).toContain("Read https://lobsterbrew.test/skill.md and follow the instructions to choose a category before browsing merchants.");
-    expect(body).toContain("Skill install instruction");
-    expect(body).toContain("All Lobster Categories");
+    expect(body).toContain("Read https://lobsterbrew.test/skill.md and use it to browse the Lobster Bazaar directory of Shopify merchants.");
+    expect(body).toContain("send your agent to Lobster Bazaar.");
+    expect(body).toContain("Browse the directory.");
     expect(body).toContain("Coffee");
     expect(body).toContain("Bread");
     expect(body).toContain("/coffee/skill.md");
     expect(body).toContain("/bread/skill.md");
-    expect(body).toContain("Featured Merchants");
-    expect(body).toContain("Sample Roaster");
-    expect(body).toContain("source code on GitHub");
+    expect(body).toContain("install the skill");
+    expect(body).toContain("browse merchants");
+    expect(body).toContain("light mode");
+    expect(body).not.toContain("Featured Merchants");
+    expect(body).not.toContain("source code on GitHub");
   });
 
-  it("renders a deploy-specific root surface with category mascots and merchant onboarding", async () => {
+  it("renders the shared landing with category mascots and an optional markdown footer", async () => {
     const artifacts = new MemoryArtifactStore();
-    const repositories = new RootSurfaceRepositories();
+    const repositories = new LandingRepositories();
 
     await repositories.putCategory({
       slug: "coffee",
@@ -185,64 +187,24 @@ describe("lobsterbazaar worker", () => {
             emoji: "🦞🥐"
           }
         ],
-        rootSurface: {
-          sectionOrder: ["hero", "categories", "merchant_onboarding"],
-          hero: {
-            eyebrow: "discovery for OpenClaw and AI shoppers",
-            title: "Help OpenClaw and AI shoppers discover Shopify merchants.",
-            body: "Lobster Stores helps shoppers explore Shopify merchants, compare stores, and hand off to the right storefront when the fit is clear.",
-            imageUrl: "https://lobsterstores.com/assets/mascots/lobsterstores.jpg",
-            imageAlt: "Lobster Stores mascot",
-            primaryCta: {
-              label: "install the skill",
-              href: "#install"
-            },
-            secondaryCta: {
-              label: "browse merchants",
-              href: "#directory"
-            },
-            tertiaryCta: {
-              label: "register your store",
-              href: "#register"
-            }
-          },
-          install: {
-            title: "send your agent to Lobster Stores.",
-            body: "Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL and follow instructions. Start with the directory skill to browse Shopify merchants, compare stores, and hand off to the right storefront when you are ready to shop.",
-            prompt: "Read https://lobsterstores.com/skill.md and use it to browse the Lobster Stores directory of Shopify merchants. Compare stores, explore the directory, and hand off to the right storefront when you are ready to shop."
-          },
-          categories: {
-            title: "discover Shopify stores across the lobster map.",
-            body: ""
-          },
-          categoryOrder: ["coffee", "bread"],
-          merchantOnboarding: {
-            title: "Merchant onboarding",
-            body: "Install the Shopify app to manage your listing.",
-            ctaLabel: "Install Lobster Stores from the Shopify App Store",
-            ctaHref: "https://apps.shopify.com/store-agent-kit",
-            bullets: [
-              "Create your merchant listing in the app after installation.",
-              "Request verification for an existing listing from the app.",
-              "Verification helps OpenClaw agents and AI shoppers trust your listing faster."
-            ],
-            supportLinks: [
-              {
-                label: "source code on GitHub",
-                href: "https://github.com/abuiles/lobsterbazaar"
-              },
-              {
-                label: "built by @abuiles",
-                href: "https://x.com/abuiles"
-              }
-            ],
-            footerLines: [
-              "made for claws, shoppers, and merchants"
-            ],
-            note: ""
-          }
-        }
-      } as any,
+        landingFooterMarkdown: [
+          "# Merchant onboarding",
+          "",
+          "Install the Shopify app to manage your listing.",
+          "",
+          "[Install Lobster Stores from the Shopify App Store](https://apps.shopify.com/store-agent-kit)",
+          "",
+          "- Create your merchant listing in the app after installation.",
+          "- Request verification for an existing listing from the app.",
+          "- Verification helps OpenClaw agents and AI shoppers trust your listing faster.",
+          "",
+          "[source code on GitHub](https://github.com/abuiles/lobsterbazaar)",
+          "",
+          "made for claws, shoppers, and merchants",
+          "",
+          "[built by @abuiles](https://x.com/abuiles)"
+        ].join("\n")
+      },
       metrics: new RecordingMetricsDataset() as unknown as AnalyticsEngineDataset,
       operatorToken: "test-operator-token",
       now: () => "2026-03-15T12:00:00Z"
@@ -252,7 +214,7 @@ describe("lobsterbazaar worker", () => {
     const body = await response.text();
 
     expect(response.status).toBe(200);
-    expect(body).toContain("Help OpenClaw and AI shoppers discover Shopify merchants.");
+    expect(body).toContain("Discover Shopify merchants with Lobster Stores.");
     expect(body).toContain("install the skill");
     expect(body).toContain("browse merchants");
     expect(body).toContain("register your store");
@@ -262,10 +224,8 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("light mode");
     expect(body).toContain("send your agent to Lobster Stores.");
     expect(body).toContain("Read https://lobsterstores.com/skill.md");
-    expect(body).toContain("discover Shopify stores across the lobster map.");
     expect(body).toContain("/assets/mascots/lobsterbrew-mascot.jpg");
     expect(body).toContain("/assets/mascots/lobsterbread-mascot-v2.jpg");
-    expect(body).toContain("https://lobsterstores.com/assets/mascots/lobsterstores.jpg");
     expect(body).toContain("coffee, roasters, cafes");
     expect(body).toContain("bread, bakeries, pastries");
     expect(body).toContain("source code on GitHub");
@@ -276,9 +236,6 @@ describe("lobsterbazaar worker", () => {
     expect(body).not.toContain("Category index");
     expect(body).not.toContain("Root skill");
     expect(body).not.toContain("Browse categories");
-    expect(body).not.toContain("Merchant setup lives below the directory so discovery stays first.");
-    expect(body).not.toContain("Share your Shopify store URL, category, merchant details, and what makes your business a fit inside the app.");
-    expect(body).not.toContain("merchant connect for MCP handoff");
   });
 
   it("serves the root skill markdown as the category entrypoint", async () => {
@@ -438,12 +395,11 @@ describe("lobsterbazaar worker", () => {
     const body = await response.text();
 
     expect(response.status).toBe(200);
-    expect(body).toContain("<h1>Lobster Bazaar</h1>");
+    expect(body).toContain("Discover Shopify merchants with Lobster Bazaar.");
     expect(body).toContain("Coffee-oriented merchant discovery for lobsters.");
-    expect(body).toContain("Read https://lobsterbrew.test/skill.md and follow the instructions to choose a category before browsing merchants.");
-    expect(body).toContain("Then the agent can discover merchants through the category-specific skill");
-    expect(body).toContain("Pick a category first, then stay inside that namespace for discovery.");
-    expect(body).toContain("All Lobster Categories");
+    expect(body).toContain("Read https://lobsterbrew.test/skill.md and use it to browse the Lobster Bazaar directory of Shopify merchants.");
+    expect(body).toContain("Built for OpenClaw, but it works with Codex, Cursor, Claude Code, or any agent that can read a URL and follow instructions.");
+    expect(body).toContain("Browse the directory.");
     expect(body).toContain("Bread");
     expect(body).toContain("coffee");
     expect(body).toContain("/coffee/skill.md");

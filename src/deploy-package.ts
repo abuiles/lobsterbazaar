@@ -1,5 +1,4 @@
 import type { Category, DeployFileConfig, DeployPackage, Merchant, MerchantClaim, Offer } from "./domain";
-import { parseRootSurfaceConfig } from "./config";
 import { badRequest, conflict } from "./errors";
 import { normalizeCountryCode } from "./merchant";
 
@@ -195,7 +194,6 @@ function parseDeployConfigWithLegacyCategory(text: string): ParsedDeployConfig {
           ? data.deploy_mascot_url.trim()
           : "/assets/mascots/lobsterbazaar-default.jpg",
       emoji: typeof data.emoji === "string" && data.emoji.trim() ? data.emoji.trim() : "🦞",
-      rootSurface: parseRootSurfaceConfig(data.root_surface),
       defaultCountries: Array.isArray(data.default_countries)
         ? data.default_countries.map((value) => normalizeCountryCode(assertString(value, "default_countries")))
         : [],
@@ -496,12 +494,20 @@ export async function loadDeployPackage(
     return readFile(`${baseDir}/deploy.config.json`);
   };
 
-  const [configText, merchantsText] = await Promise.all([
+  const [configText, merchantsText, landingFooterMarkdown] = await Promise.all([
     readConfigText(),
-    readFile(`${baseDir}/merchants.csv`)
+    readFile(`${baseDir}/merchants.csv`),
+    readFile(`${baseDir}/landing_footer.md`).catch((error) => {
+      if (!isFileNotFoundError(error)) {
+        throw error;
+      }
+
+      return undefined;
+    })
   ]);
 
   const { config, legacyCategory } = parseDeployConfigWithLegacyCategory(configText);
+  config.landingFooterMarkdown = landingFooterMarkdown?.trim() || undefined;
   let categories: Category[] = legacyCategory
     ? [{
         slug: legacyCategory.slug,

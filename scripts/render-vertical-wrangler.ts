@@ -12,7 +12,6 @@ interface DeployConfigFile {
   skill_buying_targets?: string;
   emoji?: string;
   deploy_mascot_url?: string;
-  root_surface?: unknown;
 }
 
 interface DirectoryDeployEntry {
@@ -195,10 +194,18 @@ async function main() {
     delete vars.DEPLOY_MASCOT_URL;
   }
 
-  if (typeof deployConfig.root_surface !== "undefined") {
-    vars.ROOT_SURFACE_JSON = JSON.stringify(deployConfig.root_surface);
-  } else {
-    delete vars.ROOT_SURFACE_JSON;
+  try {
+    const landingFooter = (await readFile(path.join(resolvedDeployDir, "landing_footer.md"), "utf8")).trim();
+    if (landingFooter) {
+      vars.LANDING_FOOTER_MARKDOWN = landingFooter;
+    } else {
+      delete vars.LANDING_FOOTER_MARKDOWN;
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+    delete vars.LANDING_FOOTER_MARKDOWN;
   }
 
   wranglerConfig.$schema = resolveRelativeConfigPath(resolvedDeployDir, wranglerConfig.$schema);

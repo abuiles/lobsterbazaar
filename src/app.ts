@@ -1009,8 +1009,8 @@ function renderLandingPage(
         <div class="install-grid">
           <div class="install-lead">
             <p class="surface-kicker">agent prompt</p>
-            <h2>Use ${escapeHtml(config.brandName)} with your agent.</h2>
-            <p class="install-copy">Built for OpenClaw, but it also works with Codex, Cursor, Claude Code, or any agent that can read a URL and follow instructions. Keep it available as a shopping capability so your agent can choose the right category, compare Shopify merchants, and bring you to the best storefront when you're ready to buy.</p>
+            <h2>Installed for any agent.</h2>
+            <p class="install-copy">Use ${escapeHtml(config.brandName)} with OpenClaw, Codex, Cursor, Claude Code, or any agent that can read a URL, start in the right category, compare Shopify merchants, and jump to the best storefront.</p>
           </div>
           <article class="install-card">
             <div class="prompt">

@@ -126,7 +126,7 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("Lobster Bazaar");
     expect(body).toContain("Coffee-oriented merchant discovery for lobsters.");
     expect(body).toContain("Read https://lobsterbrew.test/skill.md and use Lobster Bazaar to help me discover and buy from Shopify merchants.");
-    expect(body).toContain("Use Lobster Bazaar with your agent.");
+    expect(body).toContain("Installed for any agent.");
     expect(body).toContain("Browse the directory.");
     expect(body).toContain("Coffee");
     expect(body).toContain("Bread");
@@ -222,7 +222,7 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("Install the Shopify app to manage your listing.");
     expect(body).toContain("Install Lobster Stores from the Shopify App Store");
     expect(body).toContain("light mode");
-    expect(body).toContain("Use Lobster Stores with your agent.");
+    expect(body).toContain("Installed for any agent.");
     expect(body).toContain("Read https://lobsterstores.com/skill.md");
     expect(body).toContain("/assets/mascots/lobsterbrew-mascot.jpg");
     expect(body).toContain("/assets/mascots/lobsterbread-mascot-v2.jpg");
@@ -398,7 +398,7 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("Discover Shopify merchants with Lobster Bazaar.");
     expect(body).toContain("Coffee-oriented merchant discovery for lobsters.");
     expect(body).toContain("Read https://lobsterbrew.test/skill.md and use Lobster Bazaar to help me discover and buy from Shopify merchants.");
-    expect(body).toContain("Built for OpenClaw, but it also works with Codex, Cursor, Claude Code, or any agent that can read a URL and follow instructions.");
+    expect(body).toContain("Use Lobster Bazaar with OpenClaw, Codex, Cursor, Claude Code, or any agent that can read a URL, start in the right category, compare Shopify merchants, and jump to the best storefront.");
     expect(body).toContain("Browse the directory.");
     expect(body).toContain("Bread");
     expect(body).toContain("coffee");

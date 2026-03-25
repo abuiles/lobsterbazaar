@@ -497,6 +497,9 @@ describe("deploy artifact materialization", () => {
       expect(skill).toContain("## MCP Transport Note");
       expect(skill).toContain("`tools/list`");
       expect(skill).toContain("`GET lobsterbrew.com/{category}/countries.md`");
+      expect(skill).toContain("`GET lobsterbrew.com/{category}/countries/{country_code}.md` first");
+      expect(skill).toContain("primary merchant discovery surface for country-led or city-led shopping");
+      expect(skill).toContain("Only consult `GET lobsterbrew.com/{category}/offers/{country_code}.md` when the owner explicitly wants deals");
       expect(skill).toContain("`GET lobsterbrew.com/categories.md`");
       expect(skill).toContain("Use the merchant's MCP to generate a checkout link for the buyer");
       expect(agentSkillsIndex).toContain("\"name\": \"lobster-stores\"");

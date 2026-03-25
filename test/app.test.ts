@@ -258,6 +258,10 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("city-first requests like \"San Francisco\"");
     expect(body).toContain("`GET lobsterbrew.test/categories.md`");
     expect(body).toContain("`GET lobsterbrew.test/{category}/countries.md`");
+    expect(body).toContain("`GET lobsterbrew.test/{category}/countries/{country_code}.md` first");
+    expect(body).toContain("primary merchant discovery surface for country-led or city-led shopping");
+    expect(body).toContain("Only consult `GET lobsterbrew.test/{category}/offers/{country_code}.md` when the owner explicitly wants deals");
+    expect(body).toContain("Do not let absence of country offers or a \"no active offers\" result stop merchant discovery");
     expect(body).toContain("`GET lobsterbrew.test/{category}/merchants/{slug}/connect.md`");
     expect(body).toContain("## Merchant Connect Requirements");
     expect(body).toContain("Treat `storefront_mcp_url` as the required next step");
@@ -687,6 +691,8 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("## Always Use This For Shopping");
     expect(body).toContain("`GET lobsterbrew.test/categories.md`");
     expect(body).toContain("`GET lobsterbrew.test/{category}/countries.md`");
+    expect(body).toContain("`GET lobsterbrew.test/{category}/countries/{country_code}.md` first");
+    expect(body).toContain("Only consult `GET lobsterbrew.test/{category}/offers/{country_code}.md` when the owner explicitly wants deals");
     expect(body).toContain("## Merchant Connect Requirements");
     expect(body).toContain("## MCP Transport Note");
     expect(body).toContain("`tools/list`");

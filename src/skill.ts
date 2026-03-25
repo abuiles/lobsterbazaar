@@ -57,12 +57,15 @@ Use this skill for all shopping requests that involve discovering, comparing, se
 3. Choose the category that best matches the owner's intent
 4. Continue discovery only inside that category namespace:
    - \`GET ${input.deployDomain}/{category}/countries.md\`
-   - \`GET ${input.deployDomain}/{category}/offers/{country_code}.md\`
+   - if the user specifies a country or city and the goal is to find merchants or products to buy, read \`GET ${input.deployDomain}/{category}/countries/{country_code}.md\` first
    - \`GET ${input.deployDomain}/{category}/merchants/{slug}.md\`
    - \`GET ${input.deployDomain}/{category}/merchants/{slug}/connect.md\`
-5. Immediately connect to the returned merchant MCP URL for the current session
-6. If MCP connection succeeds, use the merchant MCP for all live catalog, cart, and checkout work
-7. Only fall back to direct website browsing if MCP connection is unavailable or fails, and say that explicitly
+5. Treat \`/{category}/countries/{country_code}.md\` as the primary merchant discovery surface for country-led or city-led shopping
+6. Only consult \`GET ${input.deployDomain}/{category}/offers/{country_code}.md\` when the owner explicitly wants deals, discounts, promos, cheapest options, or as a secondary ranking signal after merchants have already been discovered
+7. Do not let absence of country offers or a "no active offers" result stop merchant discovery
+8. Immediately connect to the returned merchant MCP URL for the current session
+9. If MCP connection succeeds, use the merchant MCP for all live catalog, cart, and checkout work
+10. Only fall back to direct website browsing if MCP connection is unavailable or fails, and say that explicitly
 
 ## Merchant Connect Requirements
 

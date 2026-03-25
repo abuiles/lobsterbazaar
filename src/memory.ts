@@ -11,6 +11,7 @@ import type {
   MerchantClaim,
   Offer,
   OffersArtifact,
+  PublishedSkillsIndex,
   PublicOffer,
   RegisterClawInput,
   RegisterClawResult
@@ -41,6 +42,8 @@ export class MemoryArtifactStore implements ArtifactStore {
   private readonly offers = new Map<string, OffersArtifact>();
   private readonly merchants = new Map<string, MerchantArtifact>();
   private rootSkill: string | null = null;
+  private publishedSkillsIndex: PublishedSkillsIndex | null = null;
+  private readonly publishedSkills = new Map<string, string>();
   private readonly categorySkills = new Map<string, string>();
 
   async getCategories(): Promise<CategoriesArtifact | null> {
@@ -81,6 +84,22 @@ export class MemoryArtifactStore implements ArtifactStore {
 
   async putRootSkill(skill: string): Promise<void> {
     this.rootSkill = skill;
+  }
+
+  async getPublishedSkillsIndex(): Promise<PublishedSkillsIndex | null> {
+    return this.publishedSkillsIndex;
+  }
+
+  async putPublishedSkillsIndex(index: PublishedSkillsIndex): Promise<void> {
+    this.publishedSkillsIndex = index;
+  }
+
+  async getPublishedSkill(name: string): Promise<string | null> {
+    return this.publishedSkills.get(name) ?? null;
+  }
+
+  async putPublishedSkill(name: string, skill: string): Promise<void> {
+    this.publishedSkills.set(name, skill);
   }
 
   async getCategorySkill(categorySlug: string): Promise<string | null> {

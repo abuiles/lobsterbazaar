@@ -476,12 +476,15 @@ describe("deploy artifact materialization", () => {
         }
       );
 
-      const [skill, categories, country, merchant, offers] = await Promise.all([
+      const [skill, categories, country, merchant, offers, agentSkillsIndex, genericSkillsIndex, publishedSkill] = await Promise.all([
         readFile(path.join(outputDir, "skill.md"), "utf8"),
         readFile(path.join(outputDir, "categories", "index.json"), "utf8"),
         readFile(path.join(outputDir, "coffee", "countries", "US.json"), "utf8"),
         readFile(path.join(outputDir, "coffee", "merchants", "sample-roaster.json"), "utf8"),
-        readFile(path.join(outputDir, "coffee", "offers", "US.json"), "utf8")
+        readFile(path.join(outputDir, "coffee", "offers", "US.json"), "utf8"),
+        readFile(path.join(outputDir, ".well-known", "agent-skills", "index.json"), "utf8"),
+        readFile(path.join(outputDir, ".well-known", "skills", "index.json"), "utf8"),
+        readFile(path.join(outputDir, ".well-known", "agent-skills", "lobster-stores", "SKILL.md"), "utf8")
       ]);
 
       expect(skill).toContain("---\nname: lobster-stores");
@@ -496,6 +499,11 @@ describe("deploy artifact materialization", () => {
       expect(skill).toContain("`GET lobsterbrew.com/{category}/countries.md`");
       expect(skill).toContain("`GET lobsterbrew.com/categories.md`");
       expect(skill).toContain("Use the merchant's MCP to generate a checkout link for the buyer");
+      expect(agentSkillsIndex).toContain("\"name\": \"lobster-stores\"");
+      expect(agentSkillsIndex).toContain("\"files\": [");
+      expect(agentSkillsIndex).toContain("\"SKILL.md\"");
+      expect(genericSkillsIndex).toBe(agentSkillsIndex);
+      expect(publishedSkill).toBe(skill);
       expect(categories).toContain("\"slug\": \"coffee\"");
       await expect(readFile(path.join(outputDir, "coffee", "skill.md"), "utf8")).rejects.toThrow();
       expect(country).toContain("\"countryCode\": \"US\"");

@@ -186,6 +186,16 @@ export interface RootSkillTemplateInput {
   registerPath: string;
 }
 
+export interface PublishedSkillEntry {
+  name: string;
+  description: string;
+  files: string[];
+}
+
+export interface PublishedSkillsIndex {
+  skills: PublishedSkillEntry[];
+}
+
 export interface DirectoryVertical {
   deployId: string;
   brandName: string;

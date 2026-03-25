@@ -224,6 +224,7 @@ describe("lobsterbazaar worker", () => {
     expect(body).toContain("light mode");
     expect(body).toContain("Installed for any agent.");
     expect(body).toContain("Read and install https://lobsterstores.com/skill.md");
+    expect(body).toContain("npx skills add https://lobsterstores.com/skill.md -g -y");
     expect(body).toContain("/assets/mascots/lobsterbrew-mascot.jpg");
     expect(body).toContain("/assets/mascots/lobsterbread-mascot-v2.jpg");
     expect(body).toContain("coffee, roasters, cafes");
@@ -289,6 +290,38 @@ describe("lobsterbazaar worker", () => {
 
     const response = await app.fetch(new Request("https://lobsterbrew.test/coffee/skill.md"));
     expect(response.status).toBe(404);
+  });
+
+  it("publishes a Skills CLI discovery index and skill package routes", async () => {
+    const { app } = await createTestHarness();
+
+    const [agentSkillsIndexResponse, genericSkillsIndexResponse, skillPackageResponse] = await Promise.all([
+      app.fetch(new Request("https://lobsterbrew.test/.well-known/agent-skills/index.json")),
+      app.fetch(new Request("https://lobsterbrew.test/.well-known/skills/index.json")),
+      app.fetch(new Request("https://lobsterbrew.test/.well-known/agent-skills/lobster-stores/SKILL.md"))
+    ]);
+
+    const agentSkillsIndex = await agentSkillsIndexResponse.json<{
+      skills: Array<{ name: string; description: string; files: string[] }>;
+    }>();
+    const genericSkillsIndex = await genericSkillsIndexResponse.json<{
+      skills: Array<{ name: string; description: string; files: string[] }>;
+    }>();
+    const skillPackage = await skillPackageResponse.text();
+
+    expect(agentSkillsIndexResponse.status).toBe(200);
+    expect(genericSkillsIndexResponse.status).toBe(200);
+    expect(skillPackageResponse.status).toBe(200);
+    expect(agentSkillsIndex.skills).toEqual([
+      {
+        name: "lobster-stores",
+        description: "Helps with shopping and purchase-intent requests by finding relevant stores by category, comparing options, and buying with OpenClaw. Use this not only for explicit shopping requests, but also for natural asks like \"I want to buy...\", \"recommend...\", \"where can I get...\", \"find stores/shops for...\", or city-led purchase requests where the user is trying to buy a product.",
+        files: ["SKILL.md"]
+      }
+    ]);
+    expect(genericSkillsIndex).toEqual(agentSkillsIndex);
+    expect(skillPackage).toContain("---\nname: lobster-stores");
+    expect(skillPackage).toContain("homepage: lobsterbrew.test");
   });
 
   it("returns the category country index in JSON and markdown", async () => {
@@ -700,6 +733,14 @@ describe("lobsterbazaar worker", () => {
 
     expect(firstResponse.status).toBe(200);
     expect((await artifacts.getRootSkill()) ?? "").toContain("# Lobster Stores");
+    expect((await artifacts.getPublishedSkillsIndex())?.skills).toEqual([
+      {
+        name: "lobster-stores",
+        description: "Helps with shopping and purchase-intent requests by finding relevant stores by category, comparing options, and buying with OpenClaw. Use this not only for explicit shopping requests, but also for natural asks like \"I want to buy...\", \"recommend...\", \"where can I get...\", \"find stores/shops for...\", or city-led purchase requests where the user is trying to buy a product.",
+        files: ["SKILL.md"]
+      }
+    ]);
+    expect((await artifacts.getPublishedSkill("lobster-stores")) ?? "").toContain("# Lobster Stores");
     expect((await artifacts.getCategoryCountry("coffee", "US"))?.merchants.map((merchant) => merchant.slug)).toEqual([
       "claimed-roaster",
       "sample-roaster"

@@ -5,10 +5,11 @@ import type {
   CountryArtifact,
   MerchantArtifact,
   OffersArtifact,
+  PublishedSkillsIndex,
   RootSkillTemplateInput
 } from "./domain";
 import type { ArtifactStore, Repositories } from "./storage";
-import { renderRootSkillTemplate } from "./skill";
+import { renderRootSkillTemplate, ROOT_SKILL_DESCRIPTION, ROOT_SKILL_NAME } from "./skill";
 
 interface SkillArtifactBaseInput {
   brandName: string;
@@ -44,6 +45,18 @@ function buildRootSkillInput(
     categories: categories.map(buildCategoryDirectoryEntry),
     categoriesPath: "/categories",
     registerPath: input.registerPath
+  };
+}
+
+function buildPublishedSkillsIndex(): PublishedSkillsIndex {
+  return {
+    skills: [
+      {
+        name: ROOT_SKILL_NAME,
+        description: ROOT_SKILL_DESCRIPTION,
+        files: ["SKILL.md"]
+      }
+    ]
   };
 }
 
@@ -172,18 +185,52 @@ export async function ensureRootSkillArtifact(
   return skill;
 }
 
+export async function ensurePublishedSkillsIndexArtifact(
+  artifacts: ArtifactStore
+): Promise<PublishedSkillsIndex> {
+  const cached = await artifacts.getPublishedSkillsIndex();
+  if (cached) {
+    return cached;
+  }
+
+  const index = buildPublishedSkillsIndex();
+  await artifacts.putPublishedSkillsIndex(index);
+  return index;
+}
+
+export async function ensurePublishedSkillArtifact(
+  artifacts: ArtifactStore,
+  repositories: Repositories,
+  now: string,
+  input: SkillArtifactBaseInput
+): Promise<string> {
+  const cached = await artifacts.getPublishedSkill(ROOT_SKILL_NAME);
+  if (cached) {
+    return cached;
+  }
+
+  const skill = await ensureRootSkillArtifact(artifacts, repositories, now, input);
+  await artifacts.putPublishedSkill(ROOT_SKILL_NAME, skill);
+  return skill;
+}
+
 export async function materializeSkillArtifacts(
   artifacts: ArtifactStore,
   categories: Category[],
   input: SkillArtifactBaseInput,
   now: string
 ): Promise<void> {
+  const rootSkill = renderRootSkillTemplate(buildRootSkillInput(input, categories));
+  const publishedSkillsIndex = buildPublishedSkillsIndex();
+
   await Promise.all([
     artifacts.putCategories({
       generatedAt: now,
       categories: categories.map(buildCategoryDirectoryEntry)
     }),
-    artifacts.putRootSkill(renderRootSkillTemplate(buildRootSkillInput(input, categories)))
+    artifacts.putRootSkill(rootSkill),
+    artifacts.putPublishedSkillsIndex(publishedSkillsIndex),
+    artifacts.putPublishedSkill(ROOT_SKILL_NAME, rootSkill)
   ]);
 }
 

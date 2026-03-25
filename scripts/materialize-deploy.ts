@@ -2,13 +2,23 @@ import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promise
 import path from "node:path";
 
 import type { ArtifactStore } from "../src/storage";
-import type { CategoriesArtifact, CountryArtifact, MerchantArtifact, OffersArtifact } from "../src/domain";
+import type {
+  CategoriesArtifact,
+  CountryArtifact,
+  MerchantArtifact,
+  OffersArtifact,
+  PublishedSkillsIndex
+} from "../src/domain";
 import { loadDeployPackage } from "../src/deploy-package";
 import { importDeployPackage, materializeDeployPackage } from "../src/import-deploy";
 import { MemoryRepositories } from "../src/memory";
 
 class FilesystemArtifactStore implements ArtifactStore {
   private readonly outputRoot: string;
+  private static readonly wellKnownPrefixes = [
+    ".well-known/agent-skills",
+    ".well-known/skills"
+  ] as const;
 
   constructor(outputDir: string) {
     this.outputRoot = path.resolve(outputDir);
@@ -52,6 +62,28 @@ class FilesystemArtifactStore implements ArtifactStore {
 
   async putRootSkill(skill: string): Promise<void> {
     await this.writeText(["skill.md"], skill);
+  }
+
+  async getPublishedSkillsIndex(): Promise<PublishedSkillsIndex | null> {
+    return null;
+  }
+
+  async putPublishedSkillsIndex(index: PublishedSkillsIndex): Promise<void> {
+    await Promise.all(
+      FilesystemArtifactStore.wellKnownPrefixes.map((prefix) =>
+        this.writeJson([...prefix.split("/"), "index.json"], index))
+    );
+  }
+
+  async getPublishedSkill(): Promise<string | null> {
+    return null;
+  }
+
+  async putPublishedSkill(name: string, skill: string): Promise<void> {
+    await Promise.all(
+      FilesystemArtifactStore.wellKnownPrefixes.map((prefix) =>
+        this.writeText([...prefix.split("/"), name, "SKILL.md"], skill))
+    );
   }
 
   async getCategorySkill(): Promise<string | null> {

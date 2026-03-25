@@ -11,6 +11,7 @@ import type {
   MerchantClaim,
   Offer,
   OffersArtifact,
+  PublishedSkillsIndex,
   PublicOffer,
   RegisterClawInput,
   RegisterClawResult
@@ -27,6 +28,10 @@ export interface ArtifactStore {
   putCategoryMerchant(categorySlug: string, artifact: MerchantArtifact): Promise<void>;
   getRootSkill(): Promise<string | null>;
   putRootSkill(skill: string): Promise<void>;
+  getPublishedSkillsIndex(): Promise<PublishedSkillsIndex | null>;
+  putPublishedSkillsIndex(index: PublishedSkillsIndex): Promise<void>;
+  getPublishedSkill(name: string): Promise<string | null>;
+  putPublishedSkill(name: string, skill: string): Promise<void>;
   getCategorySkill(categorySlug: string): Promise<string | null>;
   putCategorySkill(categorySlug: string, skill: string): Promise<void>;
 }

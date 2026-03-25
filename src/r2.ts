@@ -1,5 +1,16 @@
-import type { CategoriesArtifact, CountryArtifact, MerchantArtifact, OffersArtifact } from "./domain";
+import type {
+  CategoriesArtifact,
+  CountryArtifact,
+  MerchantArtifact,
+  OffersArtifact,
+  PublishedSkillsIndex
+} from "./domain";
 import type { ArtifactStore } from "./storage";
+
+const WELL_KNOWN_SKILL_PREFIXES = [
+  ".well-known/agent-skills",
+  ".well-known/skills"
+] as const;
 
 async function readJson<T>(bucket: R2Bucket, key: string): Promise<T | null> {
   const object = await bucket.get(key);
@@ -68,6 +79,45 @@ export class R2ArtifactStore implements ArtifactStore {
         contentType: "text/markdown; charset=utf-8"
       }
     });
+  }
+
+  async getPublishedSkillsIndex(): Promise<PublishedSkillsIndex | null> {
+    for (const prefix of WELL_KNOWN_SKILL_PREFIXES) {
+      const index = await readJson<PublishedSkillsIndex>(this.bucket, `${prefix}/index.json`);
+      if (index) {
+        return index;
+      }
+    }
+
+    return null;
+  }
+
+  async putPublishedSkillsIndex(index: PublishedSkillsIndex): Promise<void> {
+    await Promise.all(
+      WELL_KNOWN_SKILL_PREFIXES.map((prefix) => writeJson(this.bucket, `${prefix}/index.json`, index))
+    );
+  }
+
+  async getPublishedSkill(name: string): Promise<string | null> {
+    for (const prefix of WELL_KNOWN_SKILL_PREFIXES) {
+      const object = await this.bucket.get(`${prefix}/${name}/SKILL.md`);
+      if (object) {
+        return object.text();
+      }
+    }
+
+    return null;
+  }
+
+  async putPublishedSkill(name: string, skill: string): Promise<void> {
+    await Promise.all(
+      WELL_KNOWN_SKILL_PREFIXES.map((prefix) =>
+        this.bucket.put(`${prefix}/${name}/SKILL.md`, skill, {
+          httpMetadata: {
+            contentType: "text/markdown; charset=utf-8"
+          }
+        }))
+    );
   }
 
   async getCategorySkill(categorySlug: string): Promise<string | null> {

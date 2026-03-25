@@ -3,6 +3,8 @@ import {
   ensureCategoryCountryArtifact,
   ensureCategoryMerchantArtifact,
   ensureCategoryOffersArtifact,
+  ensurePublishedSkillArtifact,
+  ensurePublishedSkillsIndexArtifact,
   ensureRootSkillArtifact,
   materializeSkillArtifacts,
   materializePublicArtifacts
@@ -21,6 +23,7 @@ import { errorResponse, html, isMethod, json, parseJson, text } from "./http";
 import { prepareRequestMetric, recordRequestMetric } from "./metrics";
 import { normalizeCountryCode } from "./merchant";
 import { R2ArtifactStore } from "./r2";
+import { ROOT_SKILL_NAME } from "./skill";
 import { D1Repositories } from "./d1";
 import type { ArtifactStore, Repositories } from "./storage";
 
@@ -54,6 +57,10 @@ function buildSkillArtifactInput(config: ReturnType<typeof readDeployConfig>) {
   };
 }
 
+function normalizeWellKnownPath(pathname: string): string {
+  return pathname.replace(/\/+$/, "") || "/";
+}
+
 export function createApp(dependencies: AppDependencies) {
   return {
     fetch: async (request: Request): Promise<Response> => {
@@ -68,6 +75,7 @@ export function createApp(dependencies: AppDependencies) {
         const pathname = url.pathname.replace(/\/+$/, "") || "/";
         const wantsMarkdown = pathname.endsWith(".md");
         const normalizedPath = wantsMarkdown ? pathname.slice(0, -3) : pathname;
+        const wellKnownPath = normalizeWellKnownPath(url.pathname);
         requestNormalizedPath = normalizedPath;
         requestMetric = await prepareRequestMetric(request, normalizedPath);
 
@@ -75,7 +83,26 @@ export function createApp(dependencies: AppDependencies) {
           return dependencies.staticAssets.fetch(request);
         }
 
-        if (normalizedPath === "/" && isMethod(request, "GET")) {
+        if (wellKnownPath === "/.well-known/agent-skills/index.json" && isMethod(request, "GET")) {
+          const index = await ensurePublishedSkillsIndexArtifact(dependencies.artifacts);
+          response = json(index);
+        } else if (wellKnownPath === "/.well-known/skills/index.json" && isMethod(request, "GET")) {
+          const index = await ensurePublishedSkillsIndexArtifact(dependencies.artifacts);
+          response = json(index);
+        } else if (
+          (wellKnownPath === `/.well-known/agent-skills/${ROOT_SKILL_NAME}/SKILL.md`
+            || wellKnownPath === `/.well-known/skills/${ROOT_SKILL_NAME}/SKILL.md`)
+          && isMethod(request, "GET")
+        ) {
+          const skill = await ensurePublishedSkillArtifact(
+            dependencies.artifacts,
+            dependencies.repositories,
+            dependencies.now(),
+            buildSkillArtifactInput(dependencies.config)
+          );
+
+          response = text(skill, { headers: { "content-type": "text/markdown; charset=utf-8" } });
+        } else if (normalizedPath === "/" && isMethod(request, "GET")) {
           const categoriesArtifact = await ensureCategoriesArtifact(
             dependencies.artifacts,
             dependencies.repositories,
@@ -635,6 +662,7 @@ function renderLandingPage(
 ): string {
   const rootUrl = origin.replace(/\/$/, "");
   const skillUrl = `${rootUrl}/skill.md`;
+  const installCommand = `npx skills add ${skillUrl} -g -y`;
   const footerMarkdown = config.landingFooterMarkdown?.trim();
   const navRegisterLink = footerMarkdown ? '<a href="#register">register</a>' : "";
   const heroRegisterLink = footerMarkdown
@@ -999,6 +1027,7 @@ function renderLandingPage(
             <p class="surface-kicker">agent prompt</p>
             <h2>Installed for any agent.</h2>
             <p class="install-copy">Use ${escapeHtml(config.brandName)} with OpenClaw, Codex, Cursor, Claude Code, or any agent that can read a URL, start in the right category, compare stores, and jump to the best storefront.</p>
+            <p class="install-copy">Canonical install command: <code>${escapeHtml(installCommand)}</code></p>
           </div>
           <article class="install-card">
             <div class="prompt">

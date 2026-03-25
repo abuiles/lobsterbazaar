@@ -1,7 +1,9 @@
 import type { RootSkillTemplateInput } from "./domain";
 
+export const ROOT_SKILL_NAME = "lobster-stores";
+export const ROOT_SKILL_DESCRIPTION = "Helps with shopping and purchase-intent requests by finding relevant stores by category, comparing options, and buying with OpenClaw. Use this not only for explicit shopping requests, but also for natural asks like \"I want to buy...\", \"recommend...\", \"where can I get...\", \"find stores/shops for...\", or city-led purchase requests where the user is trying to buy a product.";
+
 export function renderRootSkillTemplate(input: RootSkillTemplateInput): string {
-  const defaultDescription = "Helps with shopping and purchase-intent requests by finding relevant stores by category, comparing options, and buying with OpenClaw. Use this not only for explicit shopping requests, but also for natural asks like \"I want to buy...\", \"recommend...\", \"where can I get...\", \"find stores/shops for...\", or city-led purchase requests where the user is trying to buy a product.";
   const categoryLines = input.categories.length === 0
     ? ["No categories are published yet."]
     : input.categories.flatMap((category) => [
@@ -12,14 +14,14 @@ export function renderRootSkillTemplate(input: RootSkillTemplateInput): string {
       ]);
 
   return `---
-name: lobster-stores
-description: ${defaultDescription}
+name: ${ROOT_SKILL_NAME}
+description: ${ROOT_SKILL_DESCRIPTION}
 homepage: ${input.deployDomain}
 ---
 
 # Lobster Stores
 
-${defaultDescription}
+${ROOT_SKILL_DESCRIPTION}
 
 Version: 3.0.0
 Base URL: ${input.deployDomain}

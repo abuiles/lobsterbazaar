@@ -2,14 +2,13 @@ import type {
   CategoriesArtifact,
   Category,
   CategoryDirectoryEntry,
-  CategorySkillTemplateInput,
   CountryArtifact,
   MerchantArtifact,
   OffersArtifact,
   RootSkillTemplateInput
 } from "./domain";
 import type { ArtifactStore, Repositories } from "./storage";
-import { renderCategorySkillTemplate, renderRootSkillTemplate } from "./skill";
+import { renderRootSkillTemplate } from "./skill";
 
 interface SkillArtifactBaseInput {
   brandName: string;
@@ -20,7 +19,7 @@ interface SkillArtifactBaseInput {
 }
 
 function buildCategoryDirectoryEntry(
-  category: Pick<Category, "slug" | "name" | "summary" | "subtitle" | "mascotUrl">
+  category: Pick<Category, "slug" | "name" | "summary" | "subtitle" | "mascotUrl" | "skillBuyingTargets">
 ): CategoryDirectoryEntry {
   return {
     slug: category.slug,
@@ -28,7 +27,7 @@ function buildCategoryDirectoryEntry(
     summary: category.summary,
     subtitle: category.subtitle,
     mascotUrl: category.mascotUrl,
-    skillPath: `/${category.slug}/skill.md`,
+    buyingTargets: category.skillBuyingTargets?.trim() || undefined,
     countriesPath: `/${category.slug}/countries`
   };
 }
@@ -45,23 +44,6 @@ function buildRootSkillInput(
     categories: categories.map(buildCategoryDirectoryEntry),
     categoriesPath: "/categories",
     registerPath: input.registerPath
-  };
-}
-
-function buildCategorySkillInput(
-  input: SkillArtifactBaseInput,
-  category: Category
-): CategorySkillTemplateInput {
-  return {
-    brandName: input.brandName,
-    deployId: input.deployId,
-    deployDomain: input.deployDomain,
-    category,
-    skillBuyingTargets: category.skillBuyingTargets,
-    registerPath: input.registerPath,
-    countriesPath: `/${category.slug}/countries`,
-    offersPath: `/${category.slug}/offers`,
-    merchantConnectPath: `/${category.slug}/merchants/{slug}/connect`
   };
 }
 
@@ -190,21 +172,6 @@ export async function ensureRootSkillArtifact(
   return skill;
 }
 
-export async function ensureCategorySkillArtifact(
-  artifacts: ArtifactStore,
-  category: Category,
-  input: SkillArtifactBaseInput
-): Promise<string> {
-  const cached = await artifacts.getCategorySkill(category.slug);
-  if (cached) {
-    return cached;
-  }
-
-  const skill = renderCategorySkillTemplate(buildCategorySkillInput(input, category));
-  await artifacts.putCategorySkill(category.slug, skill);
-  return skill;
-}
-
 export async function materializeSkillArtifacts(
   artifacts: ArtifactStore,
   categories: Category[],
@@ -216,10 +183,7 @@ export async function materializeSkillArtifacts(
       generatedAt: now,
       categories: categories.map(buildCategoryDirectoryEntry)
     }),
-    artifacts.putRootSkill(renderRootSkillTemplate(buildRootSkillInput(input, categories))),
-    ...categories.map((category) =>
-      artifacts.putCategorySkill(category.slug, renderCategorySkillTemplate(buildCategorySkillInput(input, category)))
-    )
+    artifacts.putRootSkill(renderRootSkillTemplate(buildRootSkillInput(input, categories)))
   ]);
 }
 

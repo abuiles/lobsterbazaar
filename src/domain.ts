@@ -119,7 +119,7 @@ export interface CategoryDirectoryEntry {
   summary: string;
   subtitle?: string;
   mascotUrl?: string;
-  skillPath: string;
+  buyingTargets?: string;
   countriesPath: string;
 }
 
@@ -184,18 +184,6 @@ export interface RootSkillTemplateInput {
   categories: CategoryDirectoryEntry[];
   categoriesPath: string;
   registerPath: string;
-}
-
-export interface CategorySkillTemplateInput {
-  brandName: string;
-  deployId: string;
-  deployDomain: string;
-  category: Pick<Category, "slug" | "name" | "summary" | "skillBuyingTargets">;
-  skillBuyingTargets?: string;
-  registerPath: string;
-  countriesPath: string;
-  offersPath: string;
-  merchantConnectPath: string;
 }
 
 export interface DirectoryVertical {

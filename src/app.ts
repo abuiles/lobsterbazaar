@@ -692,7 +692,7 @@ function renderLandingPage(
       </section>
     `
     : "";
-  const installInstruction = `Read and install ${skillUrl}. Use ${config.brandName} for all shopping requests. Do not answer from generic knowledge or browse merchant websites first. When I ask to buy something, use this skill first, choose the right category, compare merchants, then use merchant connect and the merchant's MCP for product, cart, and checkout work.`;
+  const installInstruction = `Read and install this skill ${skillUrl} and follow its instructions for all shopping requests.`;
 
   return `<!doctype html>
 <html lang="en">

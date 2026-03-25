@@ -476,24 +476,28 @@ describe("deploy artifact materialization", () => {
         }
       );
 
-      const [skill, categories, categorySkill, country, merchant, offers] = await Promise.all([
+      const [skill, categories, country, merchant, offers] = await Promise.all([
         readFile(path.join(outputDir, "skill.md"), "utf8"),
         readFile(path.join(outputDir, "categories", "index.json"), "utf8"),
-        readFile(path.join(outputDir, "coffee", "skill.md"), "utf8"),
         readFile(path.join(outputDir, "coffee", "countries", "US.json"), "utf8"),
         readFile(path.join(outputDir, "coffee", "merchants", "sample-roaster.json"), "utf8"),
         readFile(path.join(outputDir, "coffee", "offers", "US.json"), "utf8")
       ]);
 
-      expect(skill).toContain("# Lobster Brew Root Skill");
-      expect(skill).toContain("Version: 2.0.0");
-      expect(skill).toContain("`GET lobsterbrew.com/{category}/skill.md`");
+      expect(skill).toContain("---\nname: lobster-stores");
+      expect(skill).toContain("# Lobster Stores");
+      expect(skill).toContain("Version: 3.0.0");
+      expect(skill).toContain("Helps with shopping and purchase-intent requests by finding relevant stores by category");
+      expect(skill).toContain("Use this skill for all shopping requests");
+      expect(skill).toContain("\"I want to buy ...\"");
+      expect(skill).toContain("## Merchant Connect Requirements");
+      expect(skill).toContain("## MCP Transport Note");
+      expect(skill).toContain("`tools/list`");
+      expect(skill).toContain("`GET lobsterbrew.com/{category}/countries.md`");
       expect(skill).toContain("`GET lobsterbrew.com/categories.md`");
+      expect(skill).toContain("Use the merchant's MCP to generate a checkout link for the buyer");
       expect(categories).toContain("\"slug\": \"coffee\"");
-      expect(categorySkill).toContain("# Lobster Brew Coffee Skill");
-      expect(categorySkill).toContain("`GET lobsterbrew.com/coffee/countries.md`");
-      expect(categorySkill).toContain("GET `lobsterbrew.com/coffee/merchants/{slug}/connect.md`");
-      expect(categorySkill).toContain("lb_source__ = lobsterbrew");
+      await expect(readFile(path.join(outputDir, "coffee", "skill.md"), "utf8")).rejects.toThrow();
       expect(country).toContain("\"countryCode\": \"US\"");
       expect(merchant).toContain("\"slug\": \"sample-roaster\"");
       expect(merchant).toContain("\"categorySlugs\": [");

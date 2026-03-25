@@ -3,7 +3,6 @@ import {
   ensureCategoryCountryArtifact,
   ensureCategoryMerchantArtifact,
   ensureCategoryOffersArtifact,
-  ensureCategorySkillArtifact,
   ensureRootSkillArtifact,
   materializeSkillArtifacts,
   materializePublicArtifacts
@@ -118,7 +117,7 @@ export function createApp(dependencies: AppDependencies) {
                 summary: category.summary,
                 subtitle: category.subtitle,
                 mascot_url: category.mascotUrl,
-                skill_path: category.skillPath,
+                buying_targets: category.buyingTargets,
                 countries_path: category.countriesPath
               }))
             });
@@ -139,43 +138,66 @@ export function createApp(dependencies: AppDependencies) {
             { status: 201 }
           );
         } else {
-          const categorySkillMatch = normalizedPath.match(/^\/([^/]+)\/skill$/);
-          if (categorySkillMatch && isMethod(request, "GET")) {
-            const categorySlug = categorySkillMatch[1] ?? "";
+          const categoryCountriesIndexMatch = normalizedPath.match(/^\/([^/]+)\/countries$/);
+          if (categoryCountriesIndexMatch && isMethod(request, "GET")) {
+            const categorySlug = categoryCountriesIndexMatch[1] ?? "";
             const category = await requireCategory(dependencies.repositories, categorySlug);
-            const skill = await ensureCategorySkillArtifact(
-              dependencies.artifacts,
-              category,
-              buildSkillArtifactInput(dependencies.config)
-            );
-
-            response = text(skill, { headers: { "content-type": "text/markdown; charset=utf-8" } });
+            const countryCodes = await dependencies.repositories.listCountryCodesForCategory(category.slug);
+            response = wantsMarkdown
+              ? text(renderCategoryCountriesIndexMarkdown(category, countryCodes, url.origin), {
+                headers: { "content-type": "text/markdown; charset=utf-8" }
+              })
+              : json({
+                category_slug: category.slug,
+                generated_at: dependencies.now(),
+                countries: countryCodes
+              });
           } else {
-            const categoryCountriesIndexMatch = normalizedPath.match(/^\/([^/]+)\/countries$/);
-            if (categoryCountriesIndexMatch && isMethod(request, "GET")) {
-              const categorySlug = categoryCountriesIndexMatch[1] ?? "";
+            const categoryCountryMatch = normalizedPath.match(/^\/([^/]+)\/countries\/([A-Za-z]{2,3})$/);
+            if (categoryCountryMatch && isMethod(request, "GET")) {
+              const categorySlug = categoryCountryMatch[1] ?? "";
+              const countryCode = normalizeCountryCode(categoryCountryMatch[2] ?? "");
               const category = await requireCategory(dependencies.repositories, categorySlug);
-              const countryCodes = await dependencies.repositories.listCountryCodesForCategory(category.slug);
+              if (!(await dependencies.repositories.supportsCountryForCategory(category.slug, countryCode))) {
+                throw notFound("Country not found");
+              }
+
+              const artifact = await ensureCategoryCountryArtifact(
+                dependencies.artifacts,
+                dependencies.repositories,
+                category.slug,
+                countryCode,
+                dependencies.now()
+              );
+
               response = wantsMarkdown
-                ? text(renderCategoryCountriesIndexMarkdown(category, countryCodes, url.origin), {
+                ? text(renderCountryMarkdown(category, artifact, url.origin), {
                   headers: { "content-type": "text/markdown; charset=utf-8" }
                 })
                 : json({
                   category_slug: category.slug,
-                  generated_at: dependencies.now(),
-                  countries: countryCodes
+                  country_code: artifact.countryCode,
+                  generated_at: artifact.generatedAt,
+                  merchants: artifact.merchants.map((merchant) => ({
+                    slug: merchant.slug,
+                    display_name: merchant.displayName,
+                    store_url: merchant.storeUrl,
+                    summary: merchant.summary,
+                    description: merchant.description,
+                    active_offers_count: merchant.activeOffersCount
+                  }))
                 });
             } else {
-              const categoryCountryMatch = normalizedPath.match(/^\/([^/]+)\/countries\/([A-Za-z]{2,3})$/);
-              if (categoryCountryMatch && isMethod(request, "GET")) {
-                const categorySlug = categoryCountryMatch[1] ?? "";
-                const countryCode = normalizeCountryCode(categoryCountryMatch[2] ?? "");
+              const categoryOffersMatch = normalizedPath.match(/^\/([^/]+)\/offers\/([A-Za-z]{2,3})$/);
+              if (categoryOffersMatch && isMethod(request, "GET")) {
+                const categorySlug = categoryOffersMatch[1] ?? "";
+                const countryCode = normalizeCountryCode(categoryOffersMatch[2] ?? "");
                 const category = await requireCategory(dependencies.repositories, categorySlug);
                 if (!(await dependencies.repositories.supportsCountryForCategory(category.slug, countryCode))) {
                   throw notFound("Country not found");
                 }
 
-                const artifact = await ensureCategoryCountryArtifact(
+                const artifact = await ensureCategoryOffersArtifact(
                   dependencies.artifacts,
                   dependencies.repositories,
                   category.slug,
@@ -184,64 +206,52 @@ export function createApp(dependencies: AppDependencies) {
                 );
 
                 response = wantsMarkdown
-                  ? text(renderCountryMarkdown(category, artifact, url.origin), {
+                  ? text(renderOffersMarkdown(category, artifact.offers, countryCode), {
                     headers: { "content-type": "text/markdown; charset=utf-8" }
                   })
                   : json({
                     category_slug: category.slug,
                     country_code: artifact.countryCode,
                     generated_at: artifact.generatedAt,
-                    merchants: artifact.merchants.map((merchant) => ({
-                      slug: merchant.slug,
-                      display_name: merchant.displayName,
-                      store_url: merchant.storeUrl,
-                      summary: merchant.summary,
-                      description: merchant.description,
-                      active_offers_count: merchant.activeOffersCount
+                    offers: artifact.offers.map((offer) => ({
+                      offer_id: offer.offerId,
+                      merchant_slug: offer.merchantSlug,
+                      merchant_display_name: offer.merchantDisplayName,
+                      title: offer.title,
+                      summary: offer.summary,
+                      offer_type: offer.offerType,
+                      valid_through: offer.validThrough,
+                      terms_text: offer.termsText
                     }))
                   });
               } else {
-                const categoryOffersMatch = normalizedPath.match(/^\/([^/]+)\/offers\/([A-Za-z]{2,3})$/);
-                if (categoryOffersMatch && isMethod(request, "GET")) {
-                  const categorySlug = categoryOffersMatch[1] ?? "";
-                  const countryCode = normalizeCountryCode(categoryOffersMatch[2] ?? "");
+                const categoryMerchantMatch = normalizedPath.match(/^\/([^/]+)\/merchants\/([^/]+)$/);
+                if (categoryMerchantMatch && isMethod(request, "GET")) {
+                  const categorySlug = categoryMerchantMatch[1] ?? "";
+                  const slug = categoryMerchantMatch[2] ?? "";
                   const category = await requireCategory(dependencies.repositories, categorySlug);
-                  if (!(await dependencies.repositories.supportsCountryForCategory(category.slug, countryCode))) {
-                    throw notFound("Country not found");
-                  }
-
-                  const artifact = await ensureCategoryOffersArtifact(
+                  const artifact = await ensureCategoryMerchantArtifact(
                     dependencies.artifacts,
                     dependencies.repositories,
                     category.slug,
-                    countryCode,
+                    slug,
                     dependencies.now()
                   );
 
+                  if (!artifact) {
+                    throw notFound("Merchant not found");
+                  }
+
                   response = wantsMarkdown
-                    ? text(renderOffersMarkdown(category, artifact.offers, countryCode), {
+                    ? text(renderMerchantMarkdown(category, artifact, url.origin), {
                       headers: { "content-type": "text/markdown; charset=utf-8" }
                     })
-                    : json({
-                      category_slug: category.slug,
-                      country_code: artifact.countryCode,
-                      generated_at: artifact.generatedAt,
-                      offers: artifact.offers.map((offer) => ({
-                        offer_id: offer.offerId,
-                        merchant_slug: offer.merchantSlug,
-                        merchant_display_name: offer.merchantDisplayName,
-                        title: offer.title,
-                        summary: offer.summary,
-                        offer_type: offer.offerType,
-                        valid_through: offer.validThrough,
-                        terms_text: offer.termsText
-                      }))
-                    });
+                    : json(renderMerchantResponse(category, artifact));
                 } else {
-                  const categoryMerchantMatch = normalizedPath.match(/^\/([^/]+)\/merchants\/([^/]+)$/);
-                  if (categoryMerchantMatch && isMethod(request, "GET")) {
-                    const categorySlug = categoryMerchantMatch[1] ?? "";
-                    const slug = categoryMerchantMatch[2] ?? "";
+                  const merchantMatch = normalizedPath.match(/^\/([^/]+)\/merchants\/([^/]+)\/connect$/);
+                  if (merchantMatch && isMethod(request, "GET")) {
+                    const categorySlug = merchantMatch[1] ?? "";
+                    const slug = merchantMatch[2] ?? "";
                     const category = await requireCategory(dependencies.repositories, categorySlug);
                     const artifact = await ensureCategoryMerchantArtifact(
                       dependencies.artifacts,
@@ -255,79 +265,56 @@ export function createApp(dependencies: AppDependencies) {
                       throw notFound("Merchant not found");
                     }
 
-                    response = wantsMarkdown
-                      ? text(renderMerchantMarkdown(category, artifact, url.origin), {
-                        headers: { "content-type": "text/markdown; charset=utf-8" }
-                      })
-                      : json(renderMerchantResponse(category, artifact));
-                  } else {
-                    const merchantMatch = normalizedPath.match(/^\/([^/]+)\/merchants\/([^/]+)\/connect$/);
-                    if (merchantMatch && isMethod(request, "GET")) {
-                      const categorySlug = merchantMatch[1] ?? "";
-                      const slug = merchantMatch[2] ?? "";
-                      const category = await requireCategory(dependencies.repositories, categorySlug);
-                      const artifact = await ensureCategoryMerchantArtifact(
-                        dependencies.artifacts,
+                    const payload: MerchantConnectPayload = {
+                      merchant: {
+                        name: artifact.displayName,
+                        slug: artifact.slug,
+                        connectPath: `/${category.slug}/merchants/${artifact.slug}/connect`,
+                        storeUrl: artifact.storeUrl
+                      },
+                      mcp: {
+                        url: artifact.storefrontMcpUrl
+                      },
+                      offers: await listCategoryMerchantOffers(
                         dependencies.repositories,
                         category.slug,
-                        slug,
+                        artifact,
                         dependencies.now()
-                      );
+                      ),
+                      cartAttributes: [
+                        {
+                          key: "lb_source__",
+                          value: dependencies.config.deployId
+                        }
+                      ]
+                    };
 
-                      if (!artifact) {
-                        throw notFound("Merchant not found");
-                      }
-
-                      const payload: MerchantConnectPayload = {
+                    response = wantsMarkdown
+                      ? text(renderMerchantConnectMarkdown(category, payload), {
+                        headers: { "content-type": "text/markdown; charset=utf-8" }
+                      })
+                      : json({
+                        category_slug: category.slug,
                         merchant: {
-                          name: artifact.displayName,
-                          slug: artifact.slug,
-                          connectPath: `/${category.slug}/merchants/${artifact.slug}/connect`,
-                          storeUrl: artifact.storeUrl
+                          name: payload.merchant.name,
+                          connect_path: payload.merchant.connectPath,
+                          store_url: payload.merchant.storeUrl
                         },
-                        mcp: {
-                          url: artifact.storefrontMcpUrl
-                        },
-                        offers: await listCategoryMerchantOffers(
-                          dependencies.repositories,
-                          category.slug,
-                          artifact,
-                          dependencies.now()
-                        ),
-                        cartAttributes: [
-                          {
-                            key: "lb_source__",
-                            value: dependencies.config.deployId
-                          }
-                        ]
-                      };
-
-                      response = wantsMarkdown
-                        ? text(renderMerchantConnectMarkdown(category, payload), {
-                          headers: { "content-type": "text/markdown; charset=utf-8" }
-                        })
-                        : json({
-                          category_slug: category.slug,
-                          merchant: {
-                            name: payload.merchant.name,
-                            connect_path: payload.merchant.connectPath,
-                            store_url: payload.merchant.storeUrl
-                          },
-                          mcp: payload.mcp,
-                          offers: payload.offers.map((offer) => ({
-                            offer_id: offer.offerId,
-                            title: offer.title,
-                            summary: offer.summary,
-                            offer_type: offer.offerType,
-                            valid_through: offer.validThrough,
-                            terms_text: offer.termsText
-                          })),
-                          cart_attributes: payload.cartAttributes.map((attribute) => ({
-                            key: attribute.key,
-                            value: attribute.value
-                          }))
-                        });
-                    } else if (normalizedPath === "/internal/materialize" && isMethod(request, "POST")) {
+                        mcp: payload.mcp,
+                        offers: payload.offers.map((offer) => ({
+                          offer_id: offer.offerId,
+                          title: offer.title,
+                          summary: offer.summary,
+                          offer_type: offer.offerType,
+                          valid_through: offer.validThrough,
+                          terms_text: offer.termsText
+                        })),
+                        cart_attributes: payload.cartAttributes.map((attribute) => ({
+                          key: attribute.key,
+                          value: attribute.value
+                        }))
+                      });
+                  } else if (normalizedPath === "/internal/materialize" && isMethod(request, "POST")) {
                       requireOperatorAccess(request, dependencies.operatorToken);
 
                       const sinceRaw = url.searchParams.get("since");
@@ -354,12 +341,11 @@ export function createApp(dependencies: AppDependencies) {
                       }
 
                       response = json({ ok: true });
-                    } else if (normalizedPath === "/internal/metrics/materialize" && isMethod(request, "POST")) {
+                  } else if (normalizedPath === "/internal/metrics/materialize" && isMethod(request, "POST")) {
                       requireOperatorAccess(request, dependencies.operatorToken);
                       response = json({ ok: true });
-                    } else {
+                  } else {
                       throw notFound("Route not found");
-                    }
                   }
                 }
               }
@@ -460,7 +446,9 @@ function renderCategoriesIndexMarkdown(artifact: CategoriesArtifact, origin: str
   for (const category of artifact.categories) {
     lines.push(`- ${category.name} (\`${category.slug}\`)`);
     lines.push(`  - summary: ${category.summary}`);
-    lines.push(`  - skill_url: \`${origin}${category.skillPath}\``);
+    if (category.buyingTargets) {
+      lines.push(`  - use_when_buying: ${category.buyingTargets}`);
+    }
     lines.push(`  - countries_url: \`${origin}${category.countriesPath}.md\``);
     lines.push("");
   }
@@ -656,7 +644,7 @@ function renderLandingPage(
   const categoryMarkup = categoryCards.length === 0
     ? `<p class="surface-empty">No categories are available yet.</p>`
     : categoryCards.map((category) => `
-        <a class="surface-category-card" href="${escapeHtml(category.skillPath)}">
+        <a class="surface-category-card" href="${escapeHtml(category.countriesPath)}">
           <span class="surface-category-card__art">
             <img src="${escapeHtml(category.mascotUrl)}" alt="${escapeHtml(category.name)} mascot">
           </span>
@@ -676,7 +664,7 @@ function renderLandingPage(
       </section>
     `
     : "";
-  const installInstruction = `Read ${skillUrl} and use ${config.brandName} to help me discover and buy from Shopify merchants. When I ask for something, choose the right category, compare relevant merchants, and bring me to the best storefront when you're ready.`;
+  const installInstruction = `Read and install ${skillUrl}. Use ${config.brandName} for all shopping requests. Do not answer from generic knowledge or browse merchant websites first. When I ask to buy something, use this skill first, choose the right category, compare merchants, then use merchant connect and the merchant's MCP for product, cart, and checkout work.`;
 
   return `<!doctype html>
 <html lang="en">
@@ -991,7 +979,7 @@ function renderLandingPage(
       <section class="hero panel surface-hero" id="top">
         <div class="surface-hero__copy">
           <p class="surface-kicker">discovery for AI shoppers</p>
-          <h1>Discover Shopify merchants with ${escapeHtml(config.brandName)}.</h1>
+          <h1>Find the right stores with ${escapeHtml(config.brandName)}.</h1>
           <p class="surface-hero__body">${escapeHtml(config.verticalSummary)}</p>
           <div class="surface-hero__ctas">
             <a class="surface-hero__cta surface-hero__cta--primary" href="#install">copy agent prompt</a>
@@ -1010,7 +998,7 @@ function renderLandingPage(
           <div class="install-lead">
             <p class="surface-kicker">agent prompt</p>
             <h2>Installed for any agent.</h2>
-            <p class="install-copy">Use ${escapeHtml(config.brandName)} with OpenClaw, Codex, Cursor, Claude Code, or any agent that can read a URL, start in the right category, compare Shopify merchants, and jump to the best storefront.</p>
+            <p class="install-copy">Use ${escapeHtml(config.brandName)} with OpenClaw, Codex, Cursor, Claude Code, or any agent that can read a URL, start in the right category, compare stores, and jump to the best storefront.</p>
           </div>
           <article class="install-card">
             <div class="prompt">
@@ -1097,7 +1085,7 @@ function renderLandingPage(
 }
 
 interface LandingCategoryCard {
-  skillPath: string;
+  countriesPath: string;
   mascotUrl: string;
   name: string;
   slug: string;
@@ -1109,7 +1097,7 @@ function normalizeLandingCategories(categories: CategoryDirectoryEntry[]): Landi
   return [...categories]
     .sort((left, right) => left.name.localeCompare(right.name))
     .map((category) => ({
-      skillPath: category.skillPath,
+      countriesPath: `${category.countriesPath}.md`,
       mascotUrl: category.mascotUrl?.trim() || "/assets/mascots/lobsterbazaar-default.jpg",
       name: category.name,
       slug: category.slug,

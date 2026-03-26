@@ -3,6 +3,7 @@ import type {
   Category,
   CategoryDirectoryEntry,
   CountryArtifact,
+  Merchant,
   MerchantArtifact,
   OffersArtifact,
   PublishedSkillsIndex,
@@ -260,6 +261,59 @@ export async function materializePublicArtifacts(
         ]),
         ...merchants.map((merchant) => artifacts.putCategoryMerchant(category.slug, merchant))
       ]);
+    })
+  );
+}
+
+export async function materializeMerchantArtifacts(
+  artifacts: ArtifactStore,
+  repositories: Repositories,
+  merchantSlug: string,
+  now: string,
+  previousMerchant?: Merchant | null
+): Promise<void> {
+  const currentMerchant = await repositories.getMerchant(merchantSlug);
+  const affectedCategories = new Set([
+    ...(previousMerchant?.categorySlugs ?? []),
+    ...(currentMerchant?.categorySlugs ?? [])
+  ]);
+  const affectedCountries = new Set([
+    ...(previousMerchant?.countryCodes ?? []),
+    ...(currentMerchant?.countryCodes ?? [])
+  ]);
+
+  await Promise.all(
+    Array.from(affectedCategories).map(async (categorySlug) => {
+      const currentArtifact = currentMerchant?.categorySlugs.includes(categorySlug)
+        ? (await repositories.listMerchantArtifactsForCategory(categorySlug, now)).find((merchant) => merchant.slug === merchantSlug) ?? null
+        : null;
+
+      if (currentArtifact) {
+        await artifacts.putCategoryMerchant(categorySlug, currentArtifact);
+      } else {
+        await artifacts.deleteCategoryMerchant(categorySlug, merchantSlug);
+      }
+
+      await Promise.all(
+        Array.from(affectedCountries).map(async (countryCode) => {
+          if (await repositories.supportsCountryForCategory(categorySlug, countryCode)) {
+            const [countryArtifact, offersArtifact] = await Promise.all([
+              buildCategoryCountryArtifact(repositories, categorySlug, countryCode, now),
+              buildCategoryOffersArtifact(repositories, categorySlug, countryCode, now)
+            ]);
+
+            await Promise.all([
+              artifacts.putCategoryCountry(categorySlug, countryArtifact),
+              artifacts.putCategoryOffers(categorySlug, offersArtifact)
+            ]);
+          } else {
+            await Promise.all([
+              artifacts.deleteCategoryCountry(categorySlug, countryCode),
+              artifacts.deleteCategoryOffers(categorySlug, countryCode)
+            ]);
+          }
+        })
+      );
     })
   );
 }

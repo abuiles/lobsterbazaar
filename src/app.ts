@@ -3,6 +3,7 @@ import {
   ensureCategoryCountryArtifact,
   ensureCategoryMerchantArtifact,
   ensureCategoryOffersArtifact,
+  materializeMerchantArtifacts,
   ensurePublishedSkillArtifact,
   ensurePublishedSkillsIndexArtifact,
   ensureRootSkillArtifact,
@@ -37,6 +38,64 @@ interface AppDependencies {
   now: () => string;
 }
 
+interface ImportMerchantRequest {
+  source?: {
+    submissionId?: string;
+    reviewedBy?: string;
+    reviewNote?: string;
+  };
+  merchant?: {
+    slug?: string;
+    displayName?: string;
+    storeUrl?: string;
+    storeDomain?: string;
+    storefrontMcpUrl?: string;
+    countryCodes?: string[];
+    categorySlugs?: string[];
+    locationsSummary?: string;
+    notes?: string;
+    tags?: string[];
+    claimContact?: string;
+    verticalMetadata?: Record<string, unknown>;
+  };
+  claim?: {
+    claimId?: string;
+    status?: string;
+    contact?: string;
+    note?: string;
+  };
+  publish?: {
+    materialize?: boolean;
+  };
+}
+
+interface ParsedImportMerchantRequest {
+  sourceSubmissionId: string;
+  reviewedBy?: string;
+  reviewNote?: string;
+  merchant: {
+    slug: string;
+    displayName: string;
+    storeUrl: string;
+    storeDomain?: string;
+    storefrontMcpUrl?: string;
+    countryCodes: string[];
+    categorySlugs: string[];
+    locationsSummary?: string;
+    notes: string;
+    tags: string[];
+    claimContact?: string;
+    verticalMetadata: Record<string, unknown>;
+  };
+  claim: {
+    claimId: string;
+    status: string;
+    contact?: string;
+    note: string;
+  };
+  materialize: boolean;
+}
+
 function requireOperatorAccess(request: Request, operatorToken?: string): void {
   const header = request.headers.get("authorization");
   const providedToken = header?.replace(/^Bearer\s+/i, "");
@@ -59,6 +118,116 @@ function buildSkillArtifactInput(config: ReturnType<typeof readDeployConfig>) {
 
 function normalizeWellKnownPath(pathname: string): string {
   return pathname.replace(/\/+$/, "") || "/";
+}
+
+function readTrimmedString(value: unknown, fieldName: string, required = false): string | undefined {
+  if (typeof value !== "string") {
+    if (required) {
+      throw badRequest(`${fieldName} must be a non-empty string`);
+    }
+
+    return undefined;
+  }
+
+  const normalized = value.trim();
+  if (!normalized) {
+    if (required) {
+      throw badRequest(`${fieldName} must be a non-empty string`);
+    }
+
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function readStringArray(value: unknown, fieldName: string): string[] {
+  if (!Array.isArray(value)) {
+    throw badRequest(`${fieldName} must be an array of strings`);
+  }
+
+  const normalized = Array.from(new Set(value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean)));
+
+  if (normalized.length === 0) {
+    throw badRequest(`${fieldName} must contain at least one string`);
+  }
+
+  return normalized;
+}
+
+function assertHttpUrl(value: string, fieldName: string): void {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error("unsupported");
+    }
+  } catch {
+    throw badRequest(`${fieldName} must be a valid http or https URL`);
+  }
+}
+
+function parseImportMerchantRequest(payload: ImportMerchantRequest): ParsedImportMerchantRequest {
+  const sourceSubmissionId = readTrimmedString(payload.source?.submissionId, "source.submissionId", true)!;
+  const slug = readTrimmedString(payload.merchant?.slug, "merchant.slug", true)!;
+  const displayName = readTrimmedString(payload.merchant?.displayName, "merchant.displayName", true)!;
+  const storeUrl = readTrimmedString(payload.merchant?.storeUrl, "merchant.storeUrl", true)!;
+  const countryCodes = readStringArray(payload.merchant?.countryCodes, "merchant.countryCodes");
+  const categorySlugs = readStringArray(payload.merchant?.categorySlugs, "merchant.categorySlugs");
+  assertHttpUrl(storeUrl, "merchant.storeUrl");
+
+  const tags = Array.isArray(payload.merchant?.tags)
+    ? Array.from(new Set(payload.merchant.tags
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean)))
+    : [];
+
+  const reviewedBy = readTrimmedString(payload.source?.reviewedBy, "source.reviewedBy");
+  const reviewNote = readTrimmedString(payload.source?.reviewNote, "source.reviewNote");
+  const claimContact = readTrimmedString(payload.merchant?.claimContact, "merchant.claimContact");
+  const claimId = readTrimmedString(payload.claim?.claimId, "claim.claimId") ?? `claim_${slug}`;
+  const claimStatus = readTrimmedString(payload.claim?.status, "claim.status") ?? "approved";
+  const claimNote =
+    readTrimmedString(payload.claim?.note, "claim.note")
+    ?? `Imported from storeagent-kit submission ${sourceSubmissionId}`;
+
+  return {
+    sourceSubmissionId,
+    reviewedBy,
+    reviewNote,
+    merchant: {
+      slug,
+      displayName,
+      storeUrl,
+      storeDomain: readTrimmedString(payload.merchant?.storeDomain, "merchant.storeDomain"),
+      storefrontMcpUrl: readTrimmedString(payload.merchant?.storefrontMcpUrl, "merchant.storefrontMcpUrl"),
+      countryCodes,
+      categorySlugs,
+      locationsSummary: readTrimmedString(payload.merchant?.locationsSummary, "merchant.locationsSummary"),
+      notes:
+        readTrimmedString(payload.merchant?.notes, "merchant.notes")
+        ?? `Imported from storeagent-kit submission ${sourceSubmissionId}`,
+      tags,
+      claimContact,
+      verticalMetadata: {
+        source_system: "storeagent-kit",
+        source_submission_id: sourceSubmissionId,
+        reviewed_by: reviewedBy ?? null,
+        review_note: reviewNote ?? null,
+        ...(payload.merchant?.verticalMetadata ?? {})
+      }
+    },
+    claim: {
+      claimId,
+      status: claimStatus,
+      contact: readTrimmedString(payload.claim?.contact, "claim.contact") ?? claimContact,
+      note: claimNote
+    },
+    materialize: payload.publish?.materialize !== false
+  };
 }
 
 export function createApp(dependencies: AppDependencies) {
@@ -368,7 +537,52 @@ export function createApp(dependencies: AppDependencies) {
                       }
 
                       response = json({ ok: true });
-                  } else if (normalizedPath === "/internal/metrics/materialize" && isMethod(request, "POST")) {
+                    } else if (normalizedPath === "/internal/import/merchant" && isMethod(request, "POST")) {
+                      requireOperatorAccess(request, dependencies.operatorToken);
+                      const payload = parseImportMerchantRequest(await parseJson<ImportMerchantRequest>(request));
+                      const previousMerchant = await dependencies.repositories.getMerchant(payload.merchant.slug);
+
+                      await dependencies.repositories.putMerchant({
+                        slug: payload.merchant.slug,
+                        displayName: payload.merchant.displayName,
+                        storeUrl: payload.merchant.storeUrl,
+                        storeDomain: payload.merchant.storeDomain,
+                        storefrontMcpUrl: payload.merchant.storefrontMcpUrl,
+                        countryCodes: payload.merchant.countryCodes,
+                        categorySlugs: payload.merchant.categorySlugs,
+                        locationsSummary: payload.merchant.locationsSummary,
+                        notes: payload.merchant.notes,
+                        tags: payload.merchant.tags,
+                        claimContact: payload.merchant.claimContact,
+                        claimStatus: "claimed",
+                        verticalMetadata: payload.merchant.verticalMetadata
+                      });
+
+                      await dependencies.repositories.putClaim({
+                        claimId: payload.claim.claimId,
+                        merchantSlug: payload.merchant.slug,
+                        status: payload.claim.status,
+                        contact: payload.claim.contact,
+                        note: payload.claim.note
+                      });
+
+                      if (payload.materialize) {
+                        await materializeMerchantArtifacts(
+                          dependencies.artifacts,
+                          dependencies.repositories,
+                          payload.merchant.slug,
+                          dependencies.now(),
+                          previousMerchant
+                        );
+                      }
+
+                      response = json({
+                        ok: true,
+                        merchant_slug: payload.merchant.slug,
+                        claim_id: payload.claim.claimId,
+                        materialized: payload.materialize
+                      });
+                    } else if (normalizedPath === "/internal/metrics/materialize" && isMethod(request, "POST")) {
                       requireOperatorAccess(request, dependencies.operatorToken);
                       response = json({ ok: true });
                   } else {
@@ -584,6 +798,8 @@ function renderOffersMarkdown(category: Category, offers: Array<{
 }
 
 function renderMerchantResponse(category: Category, artifact: MerchantArtifact) {
+  const verificationStatus = artifact.claimStatus === "claimed" ? "verified" : "pending_verification";
+
   return {
     category_slug: category.slug,
     merchant: {
@@ -593,12 +809,17 @@ function renderMerchantResponse(category: Category, artifact: MerchantArtifact) 
       country_codes: artifact.countryCodes,
       category_slugs: artifact.categorySlugs,
       active_offers_count: artifact.activeOffersCount,
+      claim_status: artifact.claimStatus,
+      merchant_verification_status: verificationStatus,
+      merchant_verification_url: verificationStatus === "verified" ? undefined : "https://apps.shopify.com/store-agent-kit",
       connect_path: `/${category.slug}/merchants/${artifact.slug}/connect`
     }
   };
 }
 
 function renderMerchantMarkdown(category: Category, artifact: MerchantArtifact, origin: string): string {
+  const isVerified = artifact.claimStatus === "claimed";
+
   return [
     `# ${artifact.displayName}`,
     "",
@@ -607,6 +828,10 @@ function renderMerchantMarkdown(category: Category, artifact: MerchantArtifact, 
     `- store_url: \`${artifact.storeUrl}\``,
     `- countries: ${artifact.countryCodes.map((countryCode) => `\`${countryCode}\``).join(", ")}`,
     `- category_slugs: ${artifact.categorySlugs.map((categorySlug) => `\`${categorySlug}\``).join(", ")}`,
+    `- claim_status: \`${artifact.claimStatus}\``,
+    `- merchant_verification_status: \`${isVerified ? "verified" : "pending_verification"}\``,
+    `- profile_verified_by_merchant: ${isVerified ? "yes" : "pending verification"}`,
+    ...(isVerified ? [] : ["- verify_on_shopify: `https://apps.shopify.com/store-agent-kit`"]),
     `- active_offers_count: ${artifact.activeOffersCount}`,
     `- connect_url: \`${origin}/${category.slug}/merchants/${artifact.slug}/connect.md\``
   ].join("\n");

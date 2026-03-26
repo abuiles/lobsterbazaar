@@ -4,7 +4,6 @@ import { normalizeCountryCode } from "./merchant";
 const COUNTRIES_ROUTE_PATTERN = /^\/countries\/([A-Za-z]{2,3})$/;
 const OFFERS_ROUTE_PATTERN = /^\/offers\/([A-Za-z]{2,3})$/;
 const MERCHANT_CONNECT_ROUTE_PATTERN = /^\/merchants\/([^/]+)\/connect$/;
-const CATEGORY_SKILL_ROUTE_PATTERN = /^\/([^/]+)\/skill$/;
 const CATEGORY_COUNTRIES_ROUTE_PATTERN = /^\/([^/]+)\/countries$/;
 const CATEGORY_COUNTRY_ROUTE_PATTERN = /^\/([^/]+)\/countries\/([A-Za-z]{2,3})$/;
 const CATEGORY_OFFERS_ROUTE_PATTERN = /^\/([^/]+)\/offers\/([A-Za-z]{2,3})$/;
@@ -176,16 +175,6 @@ export async function prepareRequestMetric(request: Request, normalizedPath: str
       eventName: "merchant_connect_view",
       routeId: "/merchants/:slug/connect",
       merchantSlug: merchantConnectMatch[1] ?? "",
-      method
-    };
-  }
-
-  const categorySkillMatch = normalizedPath.match(CATEGORY_SKILL_ROUTE_PATTERN);
-  if (categorySkillMatch) {
-    return {
-      eventName: "skill_view",
-      routeId: "/:category/skill",
-      categorySlug: categorySkillMatch[1] ?? "",
       method
     };
   }

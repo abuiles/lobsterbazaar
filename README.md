@@ -10,8 +10,8 @@ It is the reusable marketplace layer behind deploys like [Lobster Brew](https://
 
 Lobster Bazaar owns the directory and routing layer, not the merchant catalog itself.
 
-- Publishes a root `skill.md` that points agents at categories
-- Publishes category-specific `/{category}/skill.md` files
+- Publishes a single root `skill.md` for all shopping requests
+- Publishes top-level category indexes at `/categories` and `/categories.md`
 - Serves category-scoped merchant discovery and offer discovery
 - Resolves a merchant's Storefront MCP endpoint
 - Returns cart attribution rules so merchants can trace claw-driven handoffs
@@ -21,8 +21,8 @@ The merchant remains the source of truth for catalog, inventory, cart state, and
 
 ## How it works
 
-1. A claw reads `GET /skill.md` and chooses a category from the root index.
-2. The claw switches to `GET /{category}/skill.md`.
+1. A claw reads `GET /skill.md` for any shopping request that fits this directory.
+2. The claw infers the category when obvious or checks `GET /categories.md`.
 3. The claw discovers merchants and offers through category-scoped artifacts.
 4. The claw selects a merchant and requests `GET /{category}/merchants/{slug}/connect`.
 5. The merchant's Shopify Storefront MCP handles catalog search, cart updates, and checkout URL generation.
@@ -36,14 +36,15 @@ The Worker currently provides:
 - `GET /skill.md`
 - `GET /categories`
 - `GET /categories.md`
-- `GET /{category}/skill.md`
 - `GET /{category}/countries`
 - `GET /{category}/countries.md`
 - `GET /{category}/countries/{country_code}`
 - `GET /{category}/offers/{country_code}`
 - `GET /{category}/merchants/{slug}`
+- `GET /{category}/merchants/{slug}.md` with verification state
 - `GET /{category}/merchants/{slug}/connect`
 - `POST /claws/register` for compatibility only
+- `POST /internal/import/merchant`
 - `POST /internal/materialize`
 - `POST /internal/metrics/materialize`
 
@@ -120,7 +121,7 @@ Run local D1 setup before starting `wrangler dev`. If the dev server is already 
 - `BRAND_NAME`, `DEPLOY_DOMAIN`, and `VERTICAL_SUMMARY` control the root and category skill copy
 - `DEPLOY_EMOJI` controls the landing-page install heading emoji
 - `DEPLOY_MASCOT_URL` optionally overrides the landing-page mascot; otherwise the default mascot in `public/assets/mascots/lobsterbazaar-default.jpg` is used
-- `OPERATOR_TOKEN` is required for `POST /internal/materialize`
+- `OPERATOR_TOKEN` is required for `POST /internal/import/merchant`, `POST /internal/materialize`, and `POST /internal/metrics/materialize`
 
 `/claws/register` exists for compatibility, but it is not required for discovery or merchant handoff.
 
@@ -137,7 +138,7 @@ Useful local checks:
 ```bash
 curl http://127.0.0.1:8787/skill.md
 curl http://127.0.0.1:8787/categories.md
-curl http://127.0.0.1:8787/coffee/skill.md
+curl http://127.0.0.1:8787/coffee/countries.md
 curl http://127.0.0.1:8787/coffee/countries/US
 curl http://127.0.0.1:8787/coffee/offers/US
 curl http://127.0.0.1:8787/coffee/merchants/sample-roaster/connect
@@ -194,6 +195,45 @@ curl -X POST http://127.0.0.1:8787/internal/materialize \
   -H "Authorization: Bearer replace-me"
 ```
 
+To publish or update a merchant from the Shopify dashboard without rematerializing the whole directory:
+
+```bash
+curl -X POST http://127.0.0.1:8787/internal/import/merchant \
+  -H "Authorization: Bearer replace-me" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": {
+      "submissionId": "sub_123",
+      "reviewedBy": "Ops Reviewer",
+      "reviewNote": "Approved in the Shopify dashboard."
+    },
+    "merchant": {
+      "slug": "atlas-roasters",
+      "displayName": "Atlas Roasters",
+      "storeUrl": "https://atlas-roasters.example.com",
+      "storeDomain": "atlas-roasters.myshopify.com",
+      "countryCodes": ["US", "CA"],
+      "categorySlugs": ["coffee"],
+      "notes": "Approved from the internal dashboard.",
+      "claimContact": "ops@atlas-roasters.example.com"
+    },
+    "claim": {
+      "claimId": "claim_atlas_roasters",
+      "status": "approved",
+      "contact": "ops@atlas-roasters.example.com"
+    }
+  }'
+```
+
+That route:
+
+- upserts the merchant row
+- upserts the claim row
+- refreshes only the affected merchant, category-country, and offers artifacts
+- deletes stale merchant artifacts when category membership is removed
+
+Use `POST /internal/materialize` only when you explicitly want a full rebuild.
+
 To process only records added after a timestamp:
 
 ```bash
@@ -207,6 +247,17 @@ If operators materialize artifacts outside the Worker, update the Analytics Engi
 curl -X POST http://127.0.0.1:8787/internal/metrics/materialize \
   -H "Authorization: Bearer replace-me"
 ```
+
+## Merchant verification in markdown
+
+`GET /{category}/merchants/{slug}.md` now exposes verification state for agent consumers. The current keys are:
+
+- `claim_status`
+- `merchant_verification_status`
+- `profile_verified_by_merchant`
+- `verify_on_shopify` when verification is pending
+
+`claimed` merchants render as verified. Unclaimed merchants render as pending verification and include the Shopify install URL `https://apps.shopify.com/store-agent-kit`.
 
 ## Offline review artifact workflow
 
@@ -224,7 +275,6 @@ That writes:
 
 - `build/example/skill.md`
 - `build/example/categories/index.json`
-- `build/example/coffee/skill.md`
 - `build/example/coffee/countries/*.json`
 - `build/example/coffee/offers/*.json`
 - `build/example/coffee/merchants/*.json`

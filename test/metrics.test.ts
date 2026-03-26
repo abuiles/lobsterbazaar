@@ -25,12 +25,7 @@ describe("metrics helpers", () => {
       "/coffee/skill"
     );
 
-    expect(categorySkillMetric).toEqual({
-      eventName: "skill_view",
-      routeId: "/:category/skill",
-      categorySlug: "coffee",
-      method: "GET"
-    });
+    expect(categorySkillMetric).toBeNull();
 
     const categoryCountryMetric = await prepareRequestMetric(
       new Request("https://lobsterbrew.test/coffee/countries/US", {

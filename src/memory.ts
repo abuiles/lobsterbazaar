@@ -62,6 +62,10 @@ export class MemoryArtifactStore implements ArtifactStore {
     this.countries.set(`${categorySlug}:${artifact.countryCode}`, artifact);
   }
 
+  async deleteCategoryCountry(categorySlug: string, countryCode: string): Promise<void> {
+    this.countries.delete(`${categorySlug}:${countryCode}`);
+  }
+
   async getCategoryOffers(categorySlug: string, countryCode: string): Promise<OffersArtifact | null> {
     return this.offers.get(`${categorySlug}:${countryCode}`) ?? null;
   }
@@ -70,12 +74,20 @@ export class MemoryArtifactStore implements ArtifactStore {
     this.offers.set(`${categorySlug}:${artifact.countryCode}`, artifact);
   }
 
+  async deleteCategoryOffers(categorySlug: string, countryCode: string): Promise<void> {
+    this.offers.delete(`${categorySlug}:${countryCode}`);
+  }
+
   async getCategoryMerchant(categorySlug: string, slug: string): Promise<MerchantArtifact | null> {
     return this.merchants.get(`${categorySlug}:${slug}`) ?? null;
   }
 
   async putCategoryMerchant(categorySlug: string, artifact: MerchantArtifact): Promise<void> {
     this.merchants.set(`${categorySlug}:${artifact.slug}`, artifact);
+  }
+
+  async deleteCategoryMerchant(categorySlug: string, slug: string): Promise<void> {
+    this.merchants.delete(`${categorySlug}:${slug}`);
   }
 
   async getRootSkill(): Promise<string | null> {

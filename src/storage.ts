@@ -22,10 +22,13 @@ export interface ArtifactStore {
   putCategories(artifact: CategoriesArtifact): Promise<void>;
   getCategoryCountry(categorySlug: string, countryCode: string): Promise<CountryArtifact | null>;
   putCategoryCountry(categorySlug: string, artifact: CountryArtifact): Promise<void>;
+  deleteCategoryCountry(categorySlug: string, countryCode: string): Promise<void>;
   getCategoryOffers(categorySlug: string, countryCode: string): Promise<OffersArtifact | null>;
   putCategoryOffers(categorySlug: string, artifact: OffersArtifact): Promise<void>;
+  deleteCategoryOffers(categorySlug: string, countryCode: string): Promise<void>;
   getCategoryMerchant(categorySlug: string, slug: string): Promise<MerchantArtifact | null>;
   putCategoryMerchant(categorySlug: string, artifact: MerchantArtifact): Promise<void>;
+  deleteCategoryMerchant(categorySlug: string, slug: string): Promise<void>;
   getRootSkill(): Promise<string | null>;
   putRootSkill(skill: string): Promise<void>;
   getPublishedSkillsIndex(): Promise<PublishedSkillsIndex | null>;

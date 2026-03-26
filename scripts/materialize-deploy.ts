@@ -40,6 +40,10 @@ class FilesystemArtifactStore implements ArtifactStore {
     await this.writeJson([categorySlug, "countries", `${artifact.countryCode}.json`], artifact);
   }
 
+  async deleteCategoryCountry(categorySlug: string, countryCode: string): Promise<void> {
+    await this.deleteFile([categorySlug, "countries", `${countryCode}.json`]);
+  }
+
   async getCategoryOffers(): Promise<OffersArtifact | null> {
     return null;
   }
@@ -48,12 +52,20 @@ class FilesystemArtifactStore implements ArtifactStore {
     await this.writeJson([categorySlug, "offers", `${artifact.countryCode}.json`], artifact);
   }
 
+  async deleteCategoryOffers(categorySlug: string, countryCode: string): Promise<void> {
+    await this.deleteFile([categorySlug, "offers", `${countryCode}.json`]);
+  }
+
   async getCategoryMerchant(): Promise<MerchantArtifact | null> {
     return null;
   }
 
   async putCategoryMerchant(categorySlug: string, artifact: MerchantArtifact): Promise<void> {
     await this.writeJson([categorySlug, "merchants", `${artifact.slug}.json`], artifact);
+  }
+
+  async deleteCategoryMerchant(categorySlug: string, slug: string): Promise<void> {
+    await this.deleteFile([categorySlug, "merchants", `${slug}.json`]);
   }
 
   async getRootSkill(): Promise<string | null> {
@@ -104,6 +116,10 @@ class FilesystemArtifactStore implements ArtifactStore {
     const filePath = this.resolveFilePath(parts);
     await mkdir(path.dirname(filePath), { recursive: true });
     await writeFile(filePath, value, "utf8");
+  }
+
+  private async deleteFile(parts: string[]): Promise<void> {
+    await rm(this.resolveFilePath(parts), { force: true });
   }
 
   private resolveFilePath(parts: string[]): string {

@@ -67,6 +67,9 @@ interface CategoryMerchantResponse {
     country_codes: string[];
     category_slugs: string[];
     active_offers_count: number;
+    claim_status: string;
+    merchant_verification_status: string;
+    merchant_verification_url?: string;
     connect_path: string;
   };
 }
@@ -385,6 +388,8 @@ describe("lobsterbazaar worker", () => {
     expect(jsonResponse.body.merchant.slug).toBe("claimed-roaster");
     expect(jsonResponse.body.merchant.display_name).toBe("Claimed Roaster");
     expect(jsonResponse.body.merchant.active_offers_count).toBe(1);
+    expect(jsonResponse.body.merchant.claim_status).toBe("claimed");
+    expect(jsonResponse.body.merchant.merchant_verification_status).toBe("verified");
     expect(jsonResponse.body.merchant.connect_path).toBe("/coffee/merchants/claimed-roaster/connect");
 
     const markdownResponse = await requestText(app, "/coffee/merchants/claimed-roaster.md");
@@ -392,7 +397,21 @@ describe("lobsterbazaar worker", () => {
     expect(markdownResponse.body).toContain("# Claimed Roaster");
     expect(markdownResponse.body).toContain("- category: `coffee`");
     expect(markdownResponse.body).toContain("- merchant_slug: `claimed-roaster`");
+    expect(markdownResponse.body).toContain("- merchant_verification_status: `verified`");
+    expect(markdownResponse.body).toContain("- profile_verified_by_merchant: yes");
     expect(markdownResponse.body).toContain("connect_url: `https://lobsterbrew.test/coffee/merchants/claimed-roaster/connect.md`");
+  });
+
+  it("renders pending verification guidance for unclaimed merchants", async () => {
+    const { app } = await createTestHarness();
+
+    const markdownResponse = await requestText(app, "/coffee/merchants/sample-roaster.md");
+
+    expect(markdownResponse.response.status).toBe(200);
+    expect(markdownResponse.body).toContain("- claim_status: `unclaimed`");
+    expect(markdownResponse.body).toContain("- merchant_verification_status: `pending_verification`");
+    expect(markdownResponse.body).toContain("- profile_verified_by_merchant: pending verification");
+    expect(markdownResponse.body).toContain("- verify_on_shopify: `https://apps.shopify.com/store-agent-kit`");
   });
 
   it("returns all available categories", async () => {
@@ -920,6 +939,182 @@ describe("lobsterbazaar worker", () => {
     const body = (await response.json()) as { error: { code: string; message: string } };
     expect(body.error.message).toContain("`since` must be an ISO timestamp");
     expect(body.error.code).toBe("bad_request");
+  });
+
+  it("imports an approved merchant submission and materializes only the affected merchant artifacts", async () => {
+    const { app, artifacts, repositories } = await createTestHarness({ includeSeedOffers: false });
+
+    const response = await app.fetch(
+      new Request("https://lobsterbrew.test/internal/import/merchant", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-operator-token",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          source: {
+            submissionId: "sub_123",
+            reviewedBy: "Ops Reviewer",
+            reviewNote: "Fits the coffee catalog."
+          },
+          merchant: {
+            slug: "atlas-roasters",
+            displayName: "Atlas Roasters",
+            storeUrl: "https://atlas-roasters.example.com",
+            storeDomain: "atlas-roasters.myshopify.com",
+            countryCodes: ["US", "CA"],
+            categorySlugs: ["coffee"],
+            locationsSummary: "Online and one tasting room",
+            notes: "Approved from the internal dashboard.",
+            tags: ["coffee", "specialty"],
+            claimContact: "ops@atlas-roasters.example.com",
+            verticalMetadata: {
+              featured: true
+            }
+          },
+          claim: {
+            claimId: "claim_atlas_roasters",
+            status: "approved",
+            contact: "ops@atlas-roasters.example.com",
+            note: "Ready for operator-managed offers."
+          }
+        })
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      ok: true,
+      merchant_slug: "atlas-roasters",
+      claim_id: "claim_atlas_roasters",
+      materialized: true
+    });
+
+    const merchant = await repositories.getMerchant("atlas-roasters");
+    expect(merchant).not.toBeNull();
+    expect(merchant).toMatchObject({
+      slug: "atlas-roasters",
+      displayName: "Atlas Roasters",
+      claimStatus: "claimed",
+      categorySlugs: ["coffee"],
+      countryCodes: ["US", "CA"]
+    });
+    expect(await repositories.listClaimIds()).toContain("claim_atlas_roasters");
+    expect(await artifacts.getCategories()).toBeNull();
+    expect(await artifacts.getRootSkill()).toBeNull();
+    expect(await artifacts.getCategoryMerchant("coffee", "atlas-roasters")).not.toBeNull();
+    expect((await artifacts.getCategoryCountry("coffee", "US"))?.merchants.map((item) => item.slug)).toContain("atlas-roasters");
+  });
+
+  it("updates existing merchants programmatically and drops removed category artifacts", async () => {
+    const { app } = await createTestHarness();
+
+    const warmedBreadMerchant = await requestText(app, "/bread/merchants/claimed-roaster.md");
+    expect(warmedBreadMerchant.response.status).toBe(200);
+
+    const warmedCoffeeCa = await requestText(app, "/coffee/countries/CA.md");
+    expect(warmedCoffeeCa.response.status).toBe(200);
+
+    const response = await app.fetch(
+      new Request("https://lobsterbrew.test/internal/import/merchant", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-operator-token",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          source: {
+            submissionId: "sub_456",
+            reviewedBy: "Ops Reviewer"
+          },
+          merchant: {
+            slug: "claimed-roaster",
+            displayName: "Claimed Roaster Prime",
+            storeUrl: "https://claimed-roaster-prime.com",
+            storeDomain: "claimed-roaster.myshopify.com",
+            countryCodes: ["US"],
+            categorySlugs: ["coffee"],
+            notes: "Updated from the dashboard.",
+            claimContact: "ops@claimed-roaster.com"
+          },
+          claim: {
+            claimId: "claim_claimed_roaster",
+            status: "approved",
+            contact: "ops@claimed-roaster.com"
+          }
+        })
+      })
+    );
+
+    expect(response.status).toBe(200);
+
+    const removedBreadMerchant = await requestJson<ErrorResponse>(app, "/bread/merchants/claimed-roaster");
+    expect(removedBreadMerchant.response.status).toBe(404);
+
+    const removedCoffeeCa = await requestJson<ErrorResponse>(app, "/coffee/countries/CA");
+    expect(removedCoffeeCa.response.status).toBe(404);
+
+    const updatedCoffeeMerchant = await requestText(app, "/coffee/merchants/claimed-roaster.md");
+    expect(updatedCoffeeMerchant.response.status).toBe(200);
+    expect(updatedCoffeeMerchant.body).toContain("# Claimed Roaster Prime");
+    expect(updatedCoffeeMerchant.body).toContain("- store_url: `https://claimed-roaster-prime.com`");
+    expect(updatedCoffeeMerchant.body).toContain("- profile_verified_by_merchant: yes");
+  });
+
+  it("returns 404 for merchant import without operator authorization", async () => {
+    const { app } = await createTestHarness();
+
+    const response = await app.fetch(
+      new Request("https://lobsterbrew.test/internal/import/merchant", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          source: { submissionId: "sub_123" },
+          merchant: {
+            slug: "atlas-roasters",
+            displayName: "Atlas Roasters",
+            storeUrl: "https://atlas-roasters.example.com",
+            countryCodes: ["US"],
+            categorySlugs: ["coffee"]
+          }
+        })
+      })
+    );
+
+    expect(response.status).toBe(404);
+    const body = (await response.json()) as ErrorResponse;
+    expect(body.error.code).toBe("not_found");
+  });
+
+  it("returns 400 for invalid merchant import payloads", async () => {
+    const { app } = await createTestHarness();
+
+    const response = await app.fetch(
+      new Request("https://lobsterbrew.test/internal/import/merchant", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-operator-token",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          source: { submissionId: "sub_123" },
+          merchant: {
+            slug: "atlas-roasters",
+            displayName: "Atlas Roasters",
+            storeUrl: "ftp://atlas-roasters.example.com",
+            countryCodes: ["US"],
+            categorySlugs: ["coffee"]
+          }
+        })
+      })
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as ErrorResponse;
+    expect(body.error.code).toBe("bad_request");
+    expect(body.error.message).toContain("merchant.storeUrl");
   });
 
   it("records snapshot counts for successful materialize runs", async () => {

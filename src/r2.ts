@@ -48,6 +48,10 @@ export class R2ArtifactStore implements ArtifactStore {
     await writeJson(this.bucket, `${categorySlug}/countries/${artifact.countryCode}.json`, artifact);
   }
 
+  async deleteCategoryCountry(categorySlug: string, countryCode: string): Promise<void> {
+    await this.bucket.delete(`${categorySlug}/countries/${countryCode}.json`);
+  }
+
   async getCategoryOffers(categorySlug: string, countryCode: string): Promise<OffersArtifact | null> {
     return readJson<OffersArtifact>(this.bucket, `${categorySlug}/offers/${countryCode}.json`);
   }
@@ -56,12 +60,20 @@ export class R2ArtifactStore implements ArtifactStore {
     await writeJson(this.bucket, `${categorySlug}/offers/${artifact.countryCode}.json`, artifact);
   }
 
+  async deleteCategoryOffers(categorySlug: string, countryCode: string): Promise<void> {
+    await this.bucket.delete(`${categorySlug}/offers/${countryCode}.json`);
+  }
+
   async getCategoryMerchant(categorySlug: string, slug: string): Promise<MerchantArtifact | null> {
     return readJson<MerchantArtifact>(this.bucket, `${categorySlug}/merchants/${slug}.json`);
   }
 
   async putCategoryMerchant(categorySlug: string, artifact: MerchantArtifact): Promise<void> {
     await writeJson(this.bucket, `${categorySlug}/merchants/${artifact.slug}.json`, artifact);
+  }
+
+  async deleteCategoryMerchant(categorySlug: string, slug: string): Promise<void> {
+    await this.bucket.delete(`${categorySlug}/merchants/${slug}.json`);
   }
 
   async getRootSkill(): Promise<string | null> {

@@ -44,6 +44,20 @@ The Worker currently provides:
 - `GET /{category}/merchants/{slug}.md` with verification state
 - `GET /{category}/merchants/{slug}/connect`
 - `POST /claws/register` for compatibility only
+- `GET /internal/categories`
+- `POST /internal/categories`
+- `GET /internal/categories/{slug}`
+- `PATCH /internal/categories/{slug}`
+- `POST /internal/categories/{slug}/unpublish`
+- `GET /internal/merchants`
+- `GET /internal/merchants/{slug}`
+- `PATCH /internal/merchants/{slug}`
+- `POST /internal/merchants/{slug}/unpublish`
+- `GET /internal/offers`
+- `POST /internal/offers`
+- `GET /internal/offers/{offerId}`
+- `PATCH /internal/offers/{offerId}`
+- `POST /internal/offers/{offerId}/unpublish`
 - `POST /internal/import/merchant`
 - `POST /internal/materialize`
 - `POST /internal/metrics/materialize`
@@ -109,6 +123,8 @@ Before using the Worker with real data, create the local D1 schema and load samp
 cp .dev.vars.example .dev.vars
 npx wrangler d1 execute lobsterbazaar --local --file migrations/0001_init.sql
 npx wrangler d1 execute lobsterbazaar --local --file migrations/0002_categories.sql
+npx wrangler d1 execute lobsterbazaar --local --file migrations/0003_category_presentation.sql
+npx wrangler d1 execute lobsterbazaar --local --file migrations/0004_publish_state.sql
 npx wrangler d1 execute lobsterbazaar --local --file seeds/example.sql
 ```
 
@@ -233,6 +249,14 @@ That route:
 - deletes stale merchant artifacts when category membership is removed
 
 Use `POST /internal/materialize` only when you explicitly want a full rebuild.
+
+For direct operator management after publish, use the new internal admin routes:
+
+- categories: create, inspect, edit, unpublish
+- merchants: list, inspect, patch, unpublish
+- offers: list, create, patch, unpublish
+
+Soft unpublish is the default removal path for categories and merchants. Offer removal is represented by moving the offer out of the public `active` state.
 
 To process only records added after a timestamp:
 

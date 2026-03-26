@@ -8,6 +8,7 @@ import type {
   Merchant,
   MerchantArtifact,
   MerchantClaim,
+  Offer,
   PublicOffer,
   RegisterClawInput,
   RegisterClawResult
@@ -36,6 +37,7 @@ interface CategoryRow {
   subtitle: string | null;
   mascot_url: string | null;
   skill_buying_targets: string | null;
+  is_published: number | string;
   created_at: string;
   updated_at: string;
 }
@@ -52,6 +54,7 @@ interface MerchantRow {
   claim_contact: string | null;
   claim_status: string;
   vertical_metadata_json: string;
+  is_published: number | string;
   created_at: string;
   updated_at: string;
 }
@@ -103,6 +106,10 @@ function parseJson<T>(value: string): T {
   return JSON.parse(value) as T;
 }
 
+function parseBoolean(value: number | string): boolean {
+  return Number(value) === 1;
+}
+
 function mapMerchant(row: MerchantRow, countryCodes: string[], categorySlugs: string[]): Merchant {
   return {
     slug: row.slug,
@@ -118,6 +125,7 @@ function mapMerchant(row: MerchantRow, countryCodes: string[], categorySlugs: st
     claimContact: row.claim_contact ?? undefined,
     claimStatus: row.claim_status as Merchant["claimStatus"],
     verticalMetadata: parseJson<Record<string, unknown>>(row.vertical_metadata_json),
+    isPublished: parseBoolean(row.is_published),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -131,6 +139,7 @@ function mapCategory(row: CategoryRow): Category {
     subtitle: row.subtitle ?? undefined,
     mascotUrl: row.mascot_url ?? undefined,
     skillBuyingTargets: row.skill_buying_targets ?? undefined,
+    isPublished: parseBoolean(row.is_published),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -223,14 +232,82 @@ export class D1Repositories implements Repositories {
     return mapMerchant(merchantRow, countries, categorySlugs);
   }
 
+  async getOffer(offerId: string): Promise<Offer | null> {
+    const offerRow = await this.db.prepare(`SELECT * FROM offers WHERE offer_id = ?1`).bind(offerId).first<OfferRow>();
+    if (!offerRow) {
+      return null;
+    }
+
+    return {
+      offerId: offerRow.offer_id,
+      merchantSlug: offerRow.merchant_slug,
+      title: offerRow.title,
+      summary: offerRow.summary,
+      countryCodes: await this.listCountryCodesForOffer(offerId),
+      activeFrom: offerRow.active_from ?? undefined,
+      validThrough: offerRow.valid_through,
+      offerType: offerRow.offer_type,
+      termsText: offerRow.terms_text,
+      priority: offerRow.priority,
+      publicProofUrl: offerRow.public_proof_url ?? undefined,
+      offerCode: offerRow.offer_code ?? undefined,
+      status: offerRow.status as Offer["status"],
+      verticalMetadata: parseJson<Record<string, unknown>>(offerRow.vertical_metadata_json),
+      createdAt: offerRow.created_at,
+      updatedAt: offerRow.updated_at
+    };
+  }
+
   async listCategories(): Promise<Category[]> {
     const result = await this.db.prepare(`SELECT * FROM categories ORDER BY slug ASC`).all<CategoryRow>();
     return (result.results ?? []).map(mapCategory);
   }
 
+  async listMerchants(): Promise<Merchant[]> {
+    const result = await this.db.prepare(`SELECT * FROM merchants ORDER BY slug ASC`).all<MerchantRow>();
+    const rows = result.results ?? [];
+
+    return Promise.all(
+      rows.map(async (row) => {
+        const [countryCodes, categorySlugs] = await Promise.all([
+          this.listCountryCodesForMerchant(row.slug),
+          this.listCategorySlugsForMerchant(row.slug)
+        ]);
+
+        return mapMerchant(row, countryCodes, categorySlugs);
+      })
+    );
+  }
+
+  async listOffers(): Promise<Offer[]> {
+    const result = await this.db.prepare(`SELECT * FROM offers ORDER BY offer_id ASC`).all<OfferRow>();
+    const rows = result.results ?? [];
+
+    return Promise.all(
+      rows.map(async (row) => ({
+        offerId: row.offer_id,
+        merchantSlug: row.merchant_slug,
+        title: row.title,
+        summary: row.summary,
+        countryCodes: await this.listCountryCodesForOffer(row.offer_id),
+        activeFrom: row.active_from ?? undefined,
+        validThrough: row.valid_through,
+        offerType: row.offer_type,
+        termsText: row.terms_text,
+        priority: row.priority,
+        publicProofUrl: row.public_proof_url ?? undefined,
+        offerCode: row.offer_code ?? undefined,
+        status: row.status as Offer["status"],
+        verticalMetadata: parseJson<Record<string, unknown>>(row.vertical_metadata_json),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }))
+    );
+  }
+
   async supportsCategory(slug: string): Promise<boolean> {
     const row = await this.db
-      .prepare(`SELECT 1 AS supported FROM categories WHERE slug = ?1 LIMIT 1`)
+      .prepare(`SELECT 1 AS supported FROM categories WHERE slug = ?1 AND is_published = 1 LIMIT 1`)
       .bind(slug.trim())
       .first<{ supported: number }>();
 
@@ -245,8 +322,12 @@ export class D1Repositories implements Repositories {
         `SELECT 1 AS supported
          FROM merchant_categories mc
          JOIN merchant_countries mco ON mco.merchant_slug = mc.merchant_slug
+         JOIN merchants m ON m.slug = mc.merchant_slug
+         JOIN categories c ON c.slug = mc.category_slug
          WHERE mc.category_slug = ?1
            AND mco.country_code = ?2
+           AND m.is_published = 1
+           AND c.is_published = 1
          LIMIT 1`
       )
       .bind(normalizedCategory, normalizedCountry)
@@ -279,6 +360,7 @@ export class D1Repositories implements Repositories {
           AND (o.active_from IS NULL OR o.active_from <= ?2)
           AND o.valid_through >= ?2
          WHERE mc.country_code = ?1
+           AND m.is_published = 1
          GROUP BY m.slug, m.display_name, m.store_url, m.locations_summary, m.notes, m.vertical_metadata_json`
       )
       .bind(normalized, now)
@@ -346,6 +428,7 @@ export class D1Repositories implements Repositories {
           AND o.valid_through >= ?3
          WHERE mco.country_code = ?1
            AND mca.category_slug = ?2
+           AND m.is_published = 1
          GROUP BY m.slug, m.display_name, m.store_url, m.locations_summary, m.notes, m.vertical_metadata_json`
       )
       .bind(normalizedCountry, normalizedCategory, now)
@@ -399,6 +482,7 @@ export class D1Repositories implements Repositories {
           AND (o.active_from IS NULL OR o.active_from <= ?1)
           AND o.valid_through >= ?1
          WHERE COALESCE(json_extract(m.vertical_metadata_json, '$.featured'), 0) = 1
+           AND m.is_published = 1
          GROUP BY m.slug, m.display_name, m.store_url, m.locations_summary, m.notes, m.vertical_metadata_json`
       )
       .bind(now)
@@ -439,8 +523,10 @@ export class D1Repositories implements Repositories {
     const row = await this.db
       .prepare(
         `SELECT 1 AS supported
-         FROM merchant_countries
-         WHERE country_code = ?1
+         FROM merchant_countries mc
+         JOIN merchants m ON m.slug = mc.merchant_slug
+         WHERE mc.country_code = ?1
+           AND m.is_published = 1
          LIMIT 1`
       )
       .bind(normalized)
@@ -470,6 +556,7 @@ export class D1Repositories implements Repositories {
            ON m.slug = o.merchant_slug
          WHERE oc.country_code = ?1
            AND o.status = 'active'
+           AND m.is_published = 1
            AND (o.active_from IS NULL OR o.active_from <= ?2)
            AND o.valid_through >= ?2
          ORDER BY o.priority DESC, o.title ASC`
@@ -520,9 +607,13 @@ export class D1Repositories implements Repositories {
            ON m.slug = o.merchant_slug
          JOIN merchant_categories mc
            ON mc.merchant_slug = o.merchant_slug
+         JOIN categories c
+           ON c.slug = mc.category_slug
          WHERE oc.country_code = ?1
            AND mc.category_slug = ?2
            AND o.status = 'active'
+           AND m.is_published = 1
+           AND c.is_published = 1
            AND (o.active_from IS NULL OR o.active_from <= ?3)
            AND o.valid_through >= ?3
          ORDER BY o.priority DESC, o.title ASC`
@@ -569,6 +660,7 @@ export class D1Repositories implements Repositories {
            ON m.slug = o.merchant_slug
          WHERE o.merchant_slug = ?1
            AND o.status = 'active'
+           AND m.is_published = 1
            AND (o.active_from IS NULL OR o.active_from <= ?2)
            AND o.valid_through >= ?2
          ORDER BY o.priority DESC, o.title ASC`
@@ -599,8 +691,8 @@ export class D1Repositories implements Repositories {
 
   async listMerchantArtifacts(now: string, since?: string): Promise<MerchantArtifact[]> {
     const merchantsQuery = since
-      ? `SELECT * FROM merchants WHERE created_at > ? ORDER BY slug ASC`
-      : `SELECT * FROM merchants ORDER BY slug ASC`;
+      ? `SELECT * FROM merchants WHERE created_at > ? AND is_published = 1 ORDER BY slug ASC`
+      : `SELECT * FROM merchants WHERE is_published = 1 ORDER BY slug ASC`;
 
     const merchantsResult = since
       ? await this.db.prepare(merchantsQuery).bind(since).all<MerchantRow>()
@@ -638,11 +730,13 @@ export class D1Repositories implements Repositories {
          JOIN merchant_categories mcat ON mcat.merchant_slug = m.slug
          WHERE mcat.category_slug = ?1
            AND m.created_at > ?2
+           AND m.is_published = 1
          ORDER BY m.slug ASC`
       : `SELECT DISTINCT m.*
          FROM merchants m
          JOIN merchant_categories mcat ON mcat.merchant_slug = m.slug
          WHERE mcat.category_slug = ?1
+           AND m.is_published = 1
          ORDER BY m.slug ASC`;
 
     const merchantsResult = since
@@ -676,7 +770,13 @@ export class D1Repositories implements Repositories {
 
   async listCountryCodes(): Promise<string[]> {
     const result = await this.db
-      .prepare(`SELECT DISTINCT country_code FROM merchant_countries ORDER BY country_code ASC`)
+      .prepare(
+        `SELECT DISTINCT mc.country_code
+         FROM merchant_countries mc
+         JOIN merchants m ON m.slug = mc.merchant_slug
+         WHERE m.is_published = 1
+         ORDER BY mc.country_code ASC`
+      )
       .all<{ country_code: string }>();
 
     return (result.results ?? []).map((row) => row.country_code);
@@ -689,7 +789,13 @@ export class D1Repositories implements Repositories {
          FROM merchant_countries mc
          JOIN merchant_categories mcat
            ON mcat.merchant_slug = mc.merchant_slug
+         JOIN merchants m
+           ON m.slug = mc.merchant_slug
+         JOIN categories c
+           ON c.slug = mcat.category_slug
          WHERE mcat.category_slug = ?1
+           AND m.is_published = 1
+           AND c.is_published = 1
          ORDER BY mc.country_code ASC`
       )
       .bind(categorySlug)
@@ -699,14 +805,14 @@ export class D1Repositories implements Repositories {
   }
 
   async listCategorySlugs(): Promise<string[]> {
-    const result = await this.db.prepare(`SELECT slug FROM categories ORDER BY slug ASC`).all<{ slug: string }>();
+    const result = await this.db.prepare(`SELECT slug FROM categories WHERE is_published = 1 ORDER BY slug ASC`).all<{ slug: string }>();
     return (result.results ?? []).map((row) => row.slug);
   }
 
   async listMerchantSlugs(since?: string): Promise<string[]> {
     const query = since
-      ? `SELECT slug FROM merchants WHERE created_at > ? ORDER BY slug ASC`
-      : `SELECT slug FROM merchants ORDER BY slug ASC`;
+      ? `SELECT slug FROM merchants WHERE created_at > ? AND is_published = 1 ORDER BY slug ASC`
+      : `SELECT slug FROM merchants WHERE is_published = 1 ORDER BY slug ASC`;
 
     const result = since
       ? await this.db.prepare(query).bind(since).all<{ slug: string }>()
@@ -792,14 +898,15 @@ export class D1Repositories implements Repositories {
     await this.db
       .prepare(
         `INSERT INTO categories
-           (slug, name, summary, subtitle, mascot_url, skill_buying_targets, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+           (slug, name, summary, subtitle, mascot_url, skill_buying_targets, is_published, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
          ON CONFLICT(slug) DO UPDATE SET
            name = excluded.name,
            summary = excluded.summary,
            subtitle = excluded.subtitle,
            mascot_url = excluded.mascot_url,
            skill_buying_targets = excluded.skill_buying_targets,
+           is_published = excluded.is_published,
            updated_at = excluded.updated_at`
       )
       .bind(
@@ -809,6 +916,7 @@ export class D1Repositories implements Repositories {
         input.subtitle ?? null,
         input.mascotUrl ?? null,
         input.skillBuyingTargets ?? null,
+        input.isPublished === false ? 0 : 1,
         createdAt,
         updatedAt
       )
@@ -826,7 +934,7 @@ export class D1Repositories implements Repositories {
     }
 
     for (const categorySlug of categorySlugs) {
-      if (!(await this.supportsCategory(categorySlug))) {
+      if (!(await this.getCategory(categorySlug))) {
         throw notFound(`Category not found: ${categorySlug}`);
       }
     }
@@ -835,8 +943,8 @@ export class D1Repositories implements Repositories {
       this.db
         .prepare(
           `INSERT INTO merchants
-             (slug, display_name, store_url, store_domain, storefront_mcp_url, locations_summary, notes, tags_json, claim_contact, claim_status, vertical_metadata_json, created_at, updated_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+             (slug, display_name, store_url, store_domain, storefront_mcp_url, locations_summary, notes, tags_json, claim_contact, claim_status, vertical_metadata_json, is_published, created_at, updated_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
            ON CONFLICT(slug) DO UPDATE SET
              display_name = excluded.display_name,
              store_url = excluded.store_url,
@@ -848,6 +956,7 @@ export class D1Repositories implements Repositories {
              claim_contact = excluded.claim_contact,
              claim_status = excluded.claim_status,
              vertical_metadata_json = excluded.vertical_metadata_json,
+             is_published = excluded.is_published,
              updated_at = excluded.updated_at`
         )
         .bind(
@@ -862,6 +971,7 @@ export class D1Repositories implements Repositories {
           input.claimContact ?? null,
           input.claimStatus,
           JSON.stringify(input.verticalMetadata),
+          input.isPublished === false ? 0 : 1,
           createdAt,
           updatedAt
         ),
@@ -1023,6 +1133,15 @@ export class D1Repositories implements Repositories {
       .all<{ category_slug: string }>();
 
     return (result.results ?? []).map((row) => row.category_slug);
+  }
+
+  private async listCountryCodesForOffer(offerId: string): Promise<string[]> {
+    const result = await this.db
+      .prepare(`SELECT country_code FROM offer_countries WHERE offer_id = ?1 ORDER BY country_code ASC`)
+      .bind(offerId)
+      .all<{ country_code: string }>();
+
+    return (result.results ?? []).map((row) => row.country_code);
   }
 
   private async hasOperatorManagedAccess(merchantSlug: string): Promise<boolean> {

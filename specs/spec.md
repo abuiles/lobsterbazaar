@@ -2452,6 +2452,20 @@ V0 defines the following public endpoints:
 
 The current operator-only internal endpoints are:
 
+- `GET /internal/categories`
+- `POST /internal/categories`
+- `GET /internal/categories/{slug}`
+- `PATCH /internal/categories/{slug}`
+- `POST /internal/categories/{slug}/unpublish`
+- `GET /internal/merchants`
+- `GET /internal/merchants/{slug}`
+- `PATCH /internal/merchants/{slug}`
+- `POST /internal/merchants/{slug}/unpublish`
+- `GET /internal/offers`
+- `POST /internal/offers`
+- `GET /internal/offers/{offerId}`
+- `PATCH /internal/offers/{offerId}`
+- `POST /internal/offers/{offerId}/unpublish`
 - `POST /internal/import/merchant`
 - `POST /internal/materialize`
 - `POST /internal/metrics/materialize`
@@ -2643,6 +2657,14 @@ It should:
 - delete stale cached merchant artifacts when category membership changes
 
 `POST /internal/materialize` remains the explicit full rebuild path.
+
+The rest of the internal admin surface is for operator-managed data after publish:
+
+- categories can be created, edited, and unpublished
+- merchants can be listed, inspected, patched, and unpublished
+- offers can be listed, created, patched, and unpublished
+
+Category and merchant removal should default to soft unpublish instead of hard delete.
 
 ## Optional post-handoff share
 

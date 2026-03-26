@@ -3,7 +3,9 @@ import {
   ensureCategoryCountryArtifact,
   ensureCategoryMerchantArtifact,
   ensureCategoryOffersArtifact,
+  materializeDirectoryArtifacts,
   materializeMerchantArtifacts,
+  materializeOfferArtifacts,
   ensurePublishedSkillArtifact,
   ensurePublishedSkillsIndexArtifact,
   ensureRootSkillArtifact,
@@ -17,6 +19,7 @@ import type {
   CategoryDirectoryEntry,
   MerchantArtifact,
   MerchantConnectPayload,
+  Offer,
   RegisterClawInput
 } from "./domain";
 import { badRequest, notFound } from "./errors";
@@ -26,7 +29,7 @@ import { normalizeCountryCode } from "./merchant";
 import { R2ArtifactStore } from "./r2";
 import { ROOT_SKILL_NAME } from "./skill";
 import { D1Repositories } from "./d1";
-import type { ArtifactStore, Repositories } from "./storage";
+import type { ArtifactStore, CreateCategoryInput, CreateOfferInput, Repositories } from "./storage";
 
 interface AppDependencies {
   artifacts: ArtifactStore;
@@ -94,6 +97,49 @@ interface ParsedImportMerchantRequest {
     note: string;
   };
   materialize: boolean;
+}
+
+interface CategoryMutationRequest {
+  slug?: string;
+  name?: string;
+  summary?: string;
+  subtitle?: string;
+  mascotUrl?: string;
+  skillBuyingTargets?: string;
+  isPublished?: boolean;
+}
+
+interface MerchantMutationRequest {
+  displayName?: string;
+  storeUrl?: string;
+  storeDomain?: string;
+  storefrontMcpUrl?: string;
+  countryCodes?: string[];
+  categorySlugs?: string[];
+  locationsSummary?: string;
+  notes?: string;
+  tags?: string[];
+  claimContact?: string;
+  claimStatus?: string;
+  verticalMetadata?: Record<string, unknown>;
+  isPublished?: boolean;
+}
+
+interface OfferMutationRequest {
+  offerId?: string;
+  merchantSlug?: string;
+  title?: string;
+  summary?: string;
+  countryCodes?: string[];
+  activeFrom?: string;
+  validThrough?: string;
+  offerType?: string;
+  termsText?: string;
+  priority?: number;
+  publicProofUrl?: string;
+  offerCode?: string;
+  status?: string;
+  verticalMetadata?: Record<string, unknown>;
 }
 
 function requireOperatorAccess(request: Request, operatorToken?: string): void {
@@ -169,6 +215,30 @@ function assertHttpUrl(value: string, fieldName: string): void {
   }
 }
 
+function readBoolean(value: unknown, fieldName: string): boolean | undefined {
+  if (typeof value === "undefined") {
+    return undefined;
+  }
+
+  if (typeof value !== "boolean") {
+    throw badRequest(`${fieldName} must be a boolean`);
+  }
+
+  return value;
+}
+
+function readNumber(value: unknown, fieldName: string): number | undefined {
+  if (typeof value === "undefined") {
+    return undefined;
+  }
+
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw badRequest(`${fieldName} must be a number`);
+  }
+
+  return value;
+}
+
 function parseImportMerchantRequest(payload: ImportMerchantRequest): ParsedImportMerchantRequest {
   const sourceSubmissionId = readTrimmedString(payload.source?.submissionId, "source.submissionId", true)!;
   const slug = readTrimmedString(payload.merchant?.slug, "merchant.slug", true)!;
@@ -228,6 +298,122 @@ function parseImportMerchantRequest(payload: ImportMerchantRequest): ParsedImpor
     },
     materialize: payload.publish?.materialize !== false
   };
+}
+
+function parseCategoryCreateRequest(payload: CategoryMutationRequest): CreateCategoryInput {
+  const slug = readTrimmedString(payload.slug, "slug", true)!;
+  const name = readTrimmedString(payload.name, "name", true)!;
+  const summary = readTrimmedString(payload.summary, "summary", true)!;
+
+  return {
+    slug,
+    name,
+    summary,
+    subtitle: readTrimmedString(payload.subtitle, "subtitle"),
+    mascotUrl: readTrimmedString(payload.mascotUrl, "mascotUrl"),
+    skillBuyingTargets: readTrimmedString(payload.skillBuyingTargets, "skillBuyingTargets"),
+    isPublished: readBoolean(payload.isPublished, "isPublished") ?? true
+  };
+}
+
+function mergeCategoryUpdate(existing: Category, payload: CategoryMutationRequest): CreateCategoryInput {
+  return {
+    slug: existing.slug,
+    name: readTrimmedString(payload.name, "name") ?? existing.name,
+    summary: readTrimmedString(payload.summary, "summary") ?? existing.summary,
+    subtitle: readTrimmedString(payload.subtitle, "subtitle") ?? existing.subtitle,
+    mascotUrl: readTrimmedString(payload.mascotUrl, "mascotUrl") ?? existing.mascotUrl,
+    skillBuyingTargets: readTrimmedString(payload.skillBuyingTargets, "skillBuyingTargets") ?? existing.skillBuyingTargets,
+    isPublished: readBoolean(payload.isPublished, "isPublished") ?? existing.isPublished ?? true,
+    createdAt: existing.createdAt
+  };
+}
+
+function mergeMerchantUpdate(existing: NonNullable<Awaited<ReturnType<Repositories["getMerchant"]>>>, payload: MerchantMutationRequest) {
+  const storeUrl = readTrimmedString(payload.storeUrl, "storeUrl") ?? existing.storeUrl;
+  assertHttpUrl(storeUrl, "storeUrl");
+
+  return {
+    slug: existing.slug,
+    displayName: readTrimmedString(payload.displayName, "displayName") ?? existing.displayName,
+    storeUrl,
+    storeDomain: readTrimmedString(payload.storeDomain, "storeDomain") ?? existing.storeDomain,
+    storefrontMcpUrl: readTrimmedString(payload.storefrontMcpUrl, "storefrontMcpUrl") ?? existing.storefrontMcpUrl,
+    countryCodes: payload.countryCodes ? readStringArray(payload.countryCodes, "countryCodes") : existing.countryCodes,
+    categorySlugs: payload.categorySlugs ? readStringArray(payload.categorySlugs, "categorySlugs") : existing.categorySlugs,
+    locationsSummary: readTrimmedString(payload.locationsSummary, "locationsSummary") ?? existing.locationsSummary,
+    notes: readTrimmedString(payload.notes, "notes") ?? existing.notes,
+    tags: payload.tags ? readStringArray(payload.tags, "tags") : existing.tags,
+    claimContact: readTrimmedString(payload.claimContact, "claimContact") ?? existing.claimContact,
+    claimStatus: (readTrimmedString(payload.claimStatus, "claimStatus") as "unclaimed" | "claimed" | undefined) ?? existing.claimStatus,
+    verticalMetadata: typeof payload.verticalMetadata === "object" && payload.verticalMetadata
+      ? { ...existing.verticalMetadata, ...payload.verticalMetadata }
+      : existing.verticalMetadata,
+    isPublished: readBoolean(payload.isPublished, "isPublished") ?? existing.isPublished ?? true,
+    createdAt: existing.createdAt
+  };
+}
+
+function parseOfferCreateRequest(payload: OfferMutationRequest): CreateOfferInput {
+  const merchantSlug = readTrimmedString(payload.merchantSlug, "merchantSlug", true)!;
+  const title = readTrimmedString(payload.title, "title", true)!;
+  const summary = readTrimmedString(payload.summary, "summary", true)!;
+  const validThrough = readTrimmedString(payload.validThrough, "validThrough", true)!;
+  const offerType = readTrimmedString(payload.offerType, "offerType", true)!;
+  const termsText = readTrimmedString(payload.termsText, "termsText", true)!;
+
+  return {
+    offerId: readTrimmedString(payload.offerId, "offerId", true)!,
+    merchantSlug,
+    title,
+    summary,
+    countryCodes: readStringArray(payload.countryCodes, "countryCodes"),
+    activeFrom: readTrimmedString(payload.activeFrom, "activeFrom"),
+    validThrough,
+    offerType,
+    termsText,
+    priority: readNumber(payload.priority, "priority") ?? 0,
+    publicProofUrl: readTrimmedString(payload.publicProofUrl, "publicProofUrl"),
+    offerCode: readTrimmedString(payload.offerCode, "offerCode"),
+    status: (readTrimmedString(payload.status, "status") as Offer["status"] | undefined) ?? "draft",
+    verticalMetadata: typeof payload.verticalMetadata === "object" && payload.verticalMetadata ? payload.verticalMetadata : {}
+  };
+}
+
+function mergeOfferUpdate(existing: Offer, payload: OfferMutationRequest): CreateOfferInput {
+  return {
+    offerId: existing.offerId,
+    merchantSlug: readTrimmedString(payload.merchantSlug, "merchantSlug") ?? existing.merchantSlug,
+    title: readTrimmedString(payload.title, "title") ?? existing.title,
+    summary: readTrimmedString(payload.summary, "summary") ?? existing.summary,
+    countryCodes: payload.countryCodes ? readStringArray(payload.countryCodes, "countryCodes") : existing.countryCodes,
+    activeFrom: readTrimmedString(payload.activeFrom, "activeFrom") ?? existing.activeFrom,
+    validThrough: readTrimmedString(payload.validThrough, "validThrough") ?? existing.validThrough,
+    offerType: readTrimmedString(payload.offerType, "offerType") ?? existing.offerType,
+    termsText: readTrimmedString(payload.termsText, "termsText") ?? existing.termsText,
+    priority: readNumber(payload.priority, "priority") ?? existing.priority,
+    publicProofUrl: readTrimmedString(payload.publicProofUrl, "publicProofUrl") ?? existing.publicProofUrl,
+    offerCode: readTrimmedString(payload.offerCode, "offerCode") ?? existing.offerCode,
+    status: (readTrimmedString(payload.status, "status") as Offer["status"] | undefined) ?? existing.status,
+    verticalMetadata: typeof payload.verticalMetadata === "object" && payload.verticalMetadata
+      ? { ...existing.verticalMetadata, ...payload.verticalMetadata }
+      : existing.verticalMetadata,
+    createdAt: existing.createdAt
+  };
+}
+
+function parseInternalSlug(pathname: string, resource: string): string | null {
+  const match = pathname.match(new RegExp(`^/internal/${resource}/([^/]+)/?$`));
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
+function parseInternalActionSlug(pathname: string, resource: string, action: string): string | null {
+  const match = pathname.match(new RegExp(`^/internal/${resource}/([^/]+)/${action}/?$`));
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
+function parseStringQuery(value: string | null): string | undefined {
+  return value?.trim() || undefined;
 }
 
 export function createApp(dependencies: AppDependencies) {
@@ -333,7 +519,199 @@ export function createApp(dependencies: AppDependencies) {
             },
             { status: 201 }
           );
+        } else if (normalizedPath === "/internal/categories" && isMethod(request, "GET")) {
+          requireOperatorAccess(request, dependencies.operatorToken);
+          response = json({
+            categories: await dependencies.repositories.listCategories()
+          });
+        } else if (normalizedPath === "/internal/categories" && isMethod(request, "POST")) {
+          requireOperatorAccess(request, dependencies.operatorToken);
+          const payload = parseCategoryCreateRequest(await parseJson<CategoryMutationRequest>(request));
+          await dependencies.repositories.putCategory(payload);
+          await materializeDirectoryArtifacts(
+            dependencies.artifacts,
+            dependencies.repositories,
+            dependencies.now(),
+            buildSkillArtifactInput(dependencies.config)
+          );
+          response = json({ category: await dependencies.repositories.getCategory(payload.slug) }, { status: 201 });
+        } else if (normalizedPath === "/internal/merchants" && isMethod(request, "GET")) {
+          requireOperatorAccess(request, dependencies.operatorToken);
+          const merchants = await dependencies.repositories.listMerchants();
+          const slugFilter = parseStringQuery(url.searchParams.get("slug"));
+          const categoryFilter = parseStringQuery(url.searchParams.get("category"));
+          const claimStatusFilter = parseStringQuery(url.searchParams.get("claim_status"));
+          response = json({
+            merchants: merchants.filter((merchant) =>
+              (!slugFilter || merchant.slug.includes(slugFilter))
+              && (!categoryFilter || merchant.categorySlugs.includes(categoryFilter))
+              && (!claimStatusFilter || merchant.claimStatus === claimStatusFilter)
+            )
+          });
+        } else if (normalizedPath === "/internal/offers" && isMethod(request, "GET")) {
+          requireOperatorAccess(request, dependencies.operatorToken);
+          const offers = await dependencies.repositories.listOffers();
+          const merchantSlugFilter = parseStringQuery(url.searchParams.get("merchant_slug"));
+          const statusFilter = parseStringQuery(url.searchParams.get("status"));
+          const countryCodeFilter = parseStringQuery(url.searchParams.get("country_code"));
+          response = json({
+            offers: offers.filter((offer) =>
+              (!merchantSlugFilter || offer.merchantSlug === merchantSlugFilter)
+              && (!statusFilter || offer.status === statusFilter)
+              && (!countryCodeFilter || offer.countryCodes.includes(normalizeCountryCode(countryCodeFilter)))
+            )
+          });
+        } else if (normalizedPath === "/internal/offers" && isMethod(request, "POST")) {
+          requireOperatorAccess(request, dependencies.operatorToken);
+          const payload = parseOfferCreateRequest(await parseJson<OfferMutationRequest>(request));
+          await dependencies.repositories.putOffer(payload);
+          await materializeOfferArtifacts(
+            dependencies.artifacts,
+            dependencies.repositories,
+            { merchantSlug: payload.merchantSlug, countryCodes: payload.countryCodes },
+            dependencies.now()
+          );
+          response = json({ offer: await dependencies.repositories.getOffer(payload.offerId) }, { status: 201 });
         } else {
+          const internalCategoryUnpublishSlug = parseInternalActionSlug(normalizedPath, "categories", "unpublish");
+          if (internalCategoryUnpublishSlug && isMethod(request, "POST")) {
+            requireOperatorAccess(request, dependencies.operatorToken);
+            const category = await dependencies.repositories.getCategory(internalCategoryUnpublishSlug);
+            if (!category) {
+              throw notFound("Category not found");
+            }
+
+            await dependencies.repositories.putCategory({
+              ...category,
+              isPublished: false
+            });
+            await materializeDirectoryArtifacts(
+              dependencies.artifacts,
+              dependencies.repositories,
+              dependencies.now(),
+              buildSkillArtifactInput(dependencies.config)
+            );
+            response = json({ category: await dependencies.repositories.getCategory(internalCategoryUnpublishSlug) });
+          } else {
+            const internalCategorySlug = parseInternalSlug(normalizedPath, "categories");
+            if (internalCategorySlug && isMethod(request, "GET")) {
+              requireOperatorAccess(request, dependencies.operatorToken);
+              const category = await dependencies.repositories.getCategory(internalCategorySlug);
+              if (!category) {
+                throw notFound("Category not found");
+              }
+              response = json({ category });
+            } else if (internalCategorySlug && isMethod(request, "PATCH")) {
+              requireOperatorAccess(request, dependencies.operatorToken);
+              const existing = await dependencies.repositories.getCategory(internalCategorySlug);
+              if (!existing) {
+                throw notFound("Category not found");
+              }
+
+              const payload = mergeCategoryUpdate(existing, await parseJson<CategoryMutationRequest>(request));
+              await dependencies.repositories.putCategory(payload);
+              await materializeDirectoryArtifacts(
+                dependencies.artifacts,
+                dependencies.repositories,
+                dependencies.now(),
+                buildSkillArtifactInput(dependencies.config)
+              );
+              response = json({ category: await dependencies.repositories.getCategory(internalCategorySlug) });
+            } else {
+              const internalMerchantUnpublishSlug = parseInternalActionSlug(normalizedPath, "merchants", "unpublish");
+              if (internalMerchantUnpublishSlug && isMethod(request, "POST")) {
+                requireOperatorAccess(request, dependencies.operatorToken);
+                const existing = await dependencies.repositories.getMerchant(internalMerchantUnpublishSlug);
+                if (!existing) {
+                  throw notFound("Merchant not found");
+                }
+
+                await dependencies.repositories.putMerchant({
+                  ...existing,
+                  isPublished: false
+                });
+                await materializeMerchantArtifacts(
+                  dependencies.artifacts,
+                  dependencies.repositories,
+                  existing.slug,
+                  dependencies.now(),
+                  existing
+                );
+                response = json({ merchant: await dependencies.repositories.getMerchant(internalMerchantUnpublishSlug) });
+              } else {
+                const internalMerchantSlug = parseInternalSlug(normalizedPath, "merchants");
+                if (internalMerchantSlug && isMethod(request, "GET")) {
+                  requireOperatorAccess(request, dependencies.operatorToken);
+                  const merchant = await dependencies.repositories.getMerchant(internalMerchantSlug);
+                  if (!merchant) {
+                    throw notFound("Merchant not found");
+                  }
+                  response = json({ merchant });
+                } else if (internalMerchantSlug && isMethod(request, "PATCH")) {
+                  requireOperatorAccess(request, dependencies.operatorToken);
+                  const existing = await dependencies.repositories.getMerchant(internalMerchantSlug);
+                  if (!existing) {
+                    throw notFound("Merchant not found");
+                  }
+
+                  const payload = mergeMerchantUpdate(existing, await parseJson<MerchantMutationRequest>(request));
+                  await dependencies.repositories.putMerchant(payload);
+                  await materializeMerchantArtifacts(
+                    dependencies.artifacts,
+                    dependencies.repositories,
+                    existing.slug,
+                    dependencies.now(),
+                    existing
+                  );
+                  response = json({ merchant: await dependencies.repositories.getMerchant(internalMerchantSlug) });
+                } else {
+                  const internalOfferUnpublishId = parseInternalActionSlug(normalizedPath, "offers", "unpublish");
+                  if (internalOfferUnpublishId && isMethod(request, "POST")) {
+                    requireOperatorAccess(request, dependencies.operatorToken);
+                    const existing = await dependencies.repositories.getOffer(internalOfferUnpublishId);
+                    if (!existing) {
+                      throw notFound("Offer not found");
+                    }
+
+                    await dependencies.repositories.putOffer({
+                      ...existing,
+                      status: "draft"
+                    });
+                    await materializeOfferArtifacts(
+                      dependencies.artifacts,
+                      dependencies.repositories,
+                      { merchantSlug: existing.merchantSlug, countryCodes: existing.countryCodes },
+                      dependencies.now(),
+                      { merchantSlug: existing.merchantSlug, countryCodes: existing.countryCodes }
+                    );
+                    response = json({ offer: await dependencies.repositories.getOffer(internalOfferUnpublishId) });
+                  } else {
+                    const internalOfferId = parseInternalSlug(normalizedPath, "offers");
+                    if (internalOfferId && isMethod(request, "GET")) {
+                      requireOperatorAccess(request, dependencies.operatorToken);
+                      const offer = await dependencies.repositories.getOffer(internalOfferId);
+                      if (!offer) {
+                        throw notFound("Offer not found");
+                      }
+                      response = json({ offer });
+                    } else if (internalOfferId && isMethod(request, "PATCH")) {
+                      requireOperatorAccess(request, dependencies.operatorToken);
+                      const existing = await dependencies.repositories.getOffer(internalOfferId);
+                      if (!existing) {
+                        throw notFound("Offer not found");
+                      }
+
+                      const payload = mergeOfferUpdate(existing, await parseJson<OfferMutationRequest>(request));
+                      await dependencies.repositories.putOffer(payload);
+                      await materializeOfferArtifacts(
+                        dependencies.artifacts,
+                        dependencies.repositories,
+                        { merchantSlug: payload.merchantSlug, countryCodes: payload.countryCodes },
+                        dependencies.now(),
+                        { merchantSlug: existing.merchantSlug, countryCodes: existing.countryCodes }
+                      );
+                      response = json({ offer: await dependencies.repositories.getOffer(internalOfferId) });
+                    } else {
           const categoryCountriesIndexMatch = normalizedPath.match(/^\/([^/]+)\/countries$/);
           if (categoryCountriesIndexMatch && isMethod(request, "GET")) {
             const categorySlug = categoryCountriesIndexMatch[1] ?? "";
@@ -519,7 +897,8 @@ export function createApp(dependencies: AppDependencies) {
                       const skillInput = buildSkillArtifactInput(dependencies.config);
 
                       if (target === "skill") {
-                        const categories = await dependencies.repositories.listCategories();
+                        const categories = (await dependencies.repositories.listCategories())
+                          .filter((category) => category.isPublished !== false);
                         await materializeSkillArtifacts(
                           dependencies.artifacts,
                           categories,
@@ -588,6 +967,12 @@ export function createApp(dependencies: AppDependencies) {
                   } else {
                       throw notFound("Route not found");
                   }
+                    }
+                  }
+                }
+              }
+            }
+          }
                 }
               }
             }
@@ -645,7 +1030,7 @@ async function recordRequestMetricSafely(
 
 async function requireCategory(repositories: Repositories, slug: string): Promise<Category> {
   const category = await repositories.getCategory(slug);
-  if (!category) {
+  if (!category || category.isPublished === false) {
     throw notFound("Category not found");
   }
 

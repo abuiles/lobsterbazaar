@@ -346,7 +346,8 @@ export function parseMerchantManifest(
     const slug = assertMerchantSlug(assertString(row.slug, "slug"), "slug");
     const displayName = assertString(row.display_name, "display_name");
     const storeUrl = assertString(row.store_url, "store_url");
-    const notes = assertString(row.notes, "notes");
+    const description = typeof row.description === "string" ? row.description.trim() : "";
+    const notes = typeof row.notes === "string" ? row.notes : description;
     const countryCodes = splitPipeList(row.country_codes).map(normalizeCountryCode);
     const categorySlugs = splitPipeList(row.category_slugs);
 

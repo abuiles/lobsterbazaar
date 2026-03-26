@@ -18,8 +18,22 @@ class RecordingStatement {
   }
 
   async first<T>() {
-    if (this.sql.includes("FROM categories")) {
-      return { supported: 1 } as T;
+    if (this.sql.includes("SELECT * FROM categories")) {
+      return {
+        slug: "coffee",
+        name: "Coffee",
+        summary: "Coffee-oriented merchant discovery for lobsters.",
+        subtitle: null,
+        mascot_url: null,
+        skill_buying_targets: "coffee",
+        is_published: 0,
+        created_at: "2026-03-15T12:00:00.000Z",
+        updated_at: "2026-03-15T12:00:00.000Z"
+      } as T;
+    }
+
+    if (this.sql.includes("SELECT 1 AS supported FROM categories")) {
+      return null as T | null;
     }
 
     return null as T | null;
@@ -73,5 +87,30 @@ describe("D1Repositories", () => {
     expect(merchantStatement?.sql).toContain("ON CONFLICT(slug) DO UPDATE");
     expect(merchantStatement?.sql).not.toContain("INSERT OR REPLACE INTO merchants");
     expect(db.batches[0]?.some((statement) => statement.sql.includes("merchant_categories"))).toBe(true);
+  });
+
+  it("allows merchant upserts when categories exist but are unpublished", async () => {
+    const db = new RecordingDatabase();
+    const repositories = new D1Repositories(db as unknown as D1Database);
+
+    await expect(
+      repositories.putMerchant({
+        slug: "claimed-roaster",
+        displayName: "Claimed Roaster",
+        storeUrl: "https://claimed-roaster.com",
+        storeDomain: "claimed-roaster.myshopify.com",
+        storefrontMcpUrl: "https://claimed-roaster.myshopify.com/api/mcp",
+        countryCodes: ["US"],
+        categorySlugs: ["coffee"],
+        locationsSummary: "5+",
+        notes: "Runs small seasonal releases.",
+        tags: ["coffee"],
+        claimContact: "ops@claimed-roaster.com",
+        claimStatus: "claimed",
+        verticalMetadata: {}
+      })
+    ).resolves.toBeUndefined();
+
+    expect(db.batches).toHaveLength(1);
   });
 });

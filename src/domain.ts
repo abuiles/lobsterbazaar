@@ -11,6 +11,7 @@ export interface Category {
   subtitle?: string;
   mascotUrl?: string;
   skillBuyingTargets?: string;
+  isPublished?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -29,6 +30,7 @@ export interface Merchant {
   claimContact?: string;
   claimStatus: ClaimStatus;
   verticalMetadata: Record<string, unknown>;
+  isPublished?: boolean;
   createdAt: string;
   updatedAt: string;
 }

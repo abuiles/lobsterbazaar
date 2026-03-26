@@ -428,6 +428,42 @@ describe("lobsterbazaar worker", () => {
     });
   });
 
+  it("creates and unpublishes categories through the internal API", async () => {
+    const { app } = await createTestHarness();
+
+    const createResponse = await requestJson<{ category: { slug: string; isPublished?: boolean } }>(app, "/internal/categories", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-operator-token",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        slug: "tea",
+        name: "Tea",
+        summary: "Tea merchants."
+      })
+    });
+
+    expect(createResponse.response.status).toBe(201);
+    expect(createResponse.body.category.slug).toBe("tea");
+
+    const publicCategories = await requestJson<CategoriesResponse>(app, "/categories");
+    expect(publicCategories.body.categories.map((category) => category.slug)).toContain("tea");
+
+    const unpublishResponse = await requestJson<{ category: { isPublished?: boolean } }>(app, "/internal/categories/tea/unpublish", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-operator-token"
+      }
+    });
+
+    expect(unpublishResponse.response.status).toBe(200);
+    expect(unpublishResponse.body.category.isPublished).toBe(false);
+
+    const refreshedCategories = await requestJson<CategoriesResponse>(app, "/categories");
+    expect(refreshedCategories.body.categories.map((category) => category.slug)).not.toContain("tea");
+  });
+
   it("returns available categories as markdown", async () => {
     const { app } = await createTestHarness();
 
@@ -1059,6 +1095,148 @@ describe("lobsterbazaar worker", () => {
     expect(updatedCoffeeMerchant.body).toContain("# Claimed Roaster Prime");
     expect(updatedCoffeeMerchant.body).toContain("- store_url: `https://claimed-roaster-prime.com`");
     expect(updatedCoffeeMerchant.body).toContain("- profile_verified_by_merchant: yes");
+  });
+
+  it("updates and unpublishes merchants through the internal API", async () => {
+    const { app } = await createTestHarness();
+
+    const updateResponse = await requestJson<{ merchant: { displayName: string } }>(app, "/internal/merchants/claimed-roaster", {
+      method: "PATCH",
+      headers: {
+        authorization: "Bearer test-operator-token",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        displayName: "Claimed Roaster Edited",
+        notes: "Updated from admin."
+      })
+    });
+
+    expect(updateResponse.response.status).toBe(200);
+    expect(updateResponse.body.merchant.displayName).toBe("Claimed Roaster Edited");
+
+    const publicMerchant = await requestText(app, "/coffee/merchants/claimed-roaster.md");
+    expect(publicMerchant.body).toContain("# Claimed Roaster Edited");
+
+    const unpublishResponse = await requestJson<{ merchant: { isPublished?: boolean } }>(app, "/internal/merchants/claimed-roaster/unpublish", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-operator-token"
+      }
+    });
+
+    expect(unpublishResponse.response.status).toBe(200);
+    expect(unpublishResponse.body.merchant.isPublished).toBe(false);
+
+    const hiddenMerchant = await requestJson<ErrorResponse>(app, "/coffee/merchants/claimed-roaster");
+    expect(hiddenMerchant.response.status).toBe(404);
+  });
+
+  it("creates, updates, and unpublishes offers through the internal API", async () => {
+    const { app } = await createTestHarness({ includeSeedOffers: false });
+
+    const createResponse = await requestJson<{ offer: { offerId: string; status: string } }>(app, "/internal/offers", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-operator-token",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        offerId: "offer_admin",
+        merchantSlug: "claimed-roaster",
+        title: "Admin offer",
+        summary: "Created from admin.",
+        countryCodes: ["US"],
+        validThrough: "2026-04-10T00:00:00Z",
+        offerType: "discount_code",
+        termsText: "Valid once.",
+        status: "active"
+      })
+    });
+
+    expect(createResponse.response.status).toBe(201);
+    expect(createResponse.body.offer.offerId).toBe("offer_admin");
+
+    const publicOffers = await requestJson<CategoryOffersResponse>(app, "/coffee/offers/US");
+    expect(publicOffers.body.offers.map((offer) => offer.offer_id)).toContain("offer_admin");
+
+    const updateResponse = await requestJson<{ offer: { title: string } }>(app, "/internal/offers/offer_admin", {
+      method: "PATCH",
+      headers: {
+        authorization: "Bearer test-operator-token",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        title: "Admin offer updated"
+      })
+    });
+
+    expect(updateResponse.response.status).toBe(200);
+    expect(updateResponse.body.offer.title).toBe("Admin offer updated");
+
+    const unpublishResponse = await requestJson<{ offer: { status: string } }>(app, "/internal/offers/offer_admin/unpublish", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-operator-token"
+      }
+    });
+
+    expect(unpublishResponse.response.status).toBe(200);
+    expect(unpublishResponse.body.offer.status).toBe("draft");
+
+    const refreshedOffers = await requestJson<CategoryOffersResponse>(app, "/coffee/offers/US");
+    expect(refreshedOffers.body.offers.map((offer) => offer.offer_id)).not.toContain("offer_admin");
+  });
+
+  it("refreshes old and new category artifacts when moving an offer to another merchant", async () => {
+    const { app, repositories } = await createTestHarness();
+
+    await repositories.putMerchant({
+      slug: "bread-merchant",
+      displayName: "Bread Merchant",
+      storeUrl: "https://bread-merchant.com",
+      storeDomain: "bread-merchant.myshopify.com",
+      storefrontMcpUrl: undefined,
+      countryCodes: ["US"],
+      categorySlugs: ["bread"],
+      locationsSummary: "1 bakery",
+      notes: "Only sells bread.",
+      tags: ["bread"],
+      claimContact: "ops@bread-merchant.com",
+      claimStatus: "claimed",
+      verticalMetadata: {}
+    });
+
+    await repositories.putClaim({
+      claimId: "claim_bread_merchant",
+      merchantSlug: "bread-merchant",
+      status: "claimed",
+      contact: "ops@bread-merchant.com",
+      note: "Seed claim for moved-offer coverage."
+    });
+
+    const initialCoffeeOffers = await requestJson<CategoryOffersResponse>(app, "/coffee/offers/US");
+    expect(initialCoffeeOffers.body.offers.map((offer) => offer.offer_id)).toContain("offer_active");
+
+    const updateResponse = await requestJson<{ offer: { merchantSlug: string } }>(app, "/internal/offers/offer_active", {
+      method: "PATCH",
+      headers: {
+        authorization: "Bearer test-operator-token",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        merchantSlug: "bread-merchant"
+      })
+    });
+
+    expect(updateResponse.response.status).toBe(200);
+    expect(updateResponse.body.offer.merchantSlug).toBe("bread-merchant");
+
+    const refreshedCoffeeOffers = await requestJson<CategoryOffersResponse>(app, "/coffee/offers/US");
+    expect(refreshedCoffeeOffers.body.offers.map((offer) => offer.offer_id)).not.toContain("offer_active");
+
+    const breadOffers = await requestJson<CategoryOffersResponse>(app, "/bread/offers/US");
+    expect(breadOffers.body.offers.map((offer) => offer.offer_id)).toContain("offer_active");
   });
 
   it("returns 404 for merchant import without operator authorization", async () => {

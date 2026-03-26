@@ -63,7 +63,10 @@ export interface Repositories {
   createClaw(input: RegisterClawInput, deployId: string): Promise<RegisterClawResult>;
   getCategory(slug: string): Promise<Category | null>;
   getMerchant(slug: string): Promise<Merchant | null>;
+  getOffer(offerId: string): Promise<Offer | null>;
   listCategories(): Promise<Category[]>;
+  listMerchants(): Promise<Merchant[]>;
+  listOffers(): Promise<Offer[]>;
   supportsCountry(countryCode: string): Promise<boolean>;
   supportsCategory(slug: string): Promise<boolean>;
   supportsCountryForCategory(categorySlug: string, countryCode: string): Promise<boolean>;

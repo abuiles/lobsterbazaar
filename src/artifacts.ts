@@ -20,6 +20,11 @@ interface SkillArtifactBaseInput {
   registerPath: string;
 }
 
+interface OfferRefreshInput {
+  merchantSlug: string;
+  countryCodes: string[];
+}
+
 function buildCategoryDirectoryEntry(
   category: Pick<Category, "slug" | "name" | "summary" | "subtitle" | "mascotUrl" | "skillBuyingTargets">
 ): CategoryDirectoryEntry {
@@ -65,7 +70,7 @@ async function buildCategoriesArtifact(
   repositories: Repositories,
   now: string
 ): Promise<CategoriesArtifact> {
-  const categories = await repositories.listCategories();
+  const categories = (await repositories.listCategories()).filter((category) => category.isPublished !== false);
   return {
     generatedAt: now,
     categories: categories.map(buildCategoryDirectoryEntry)
@@ -96,6 +101,42 @@ async function buildCategoryOffersArtifact(
     generatedAt: now,
     offers: await repositories.listActiveOffersForCategory(categorySlug, countryCode, now)
   };
+}
+
+async function refreshCategoryCountryArtifacts(
+  artifacts: ArtifactStore,
+  repositories: Repositories,
+  categorySlug: string,
+  countryCode: string,
+  now: string
+): Promise<void> {
+  if (await repositories.supportsCountryForCategory(categorySlug, countryCode)) {
+    const [countryArtifact, offersArtifact] = await Promise.all([
+      buildCategoryCountryArtifact(repositories, categorySlug, countryCode, now),
+      buildCategoryOffersArtifact(repositories, categorySlug, countryCode, now)
+    ]);
+
+    await Promise.all([
+      artifacts.putCategoryCountry(categorySlug, countryArtifact),
+      artifacts.putCategoryOffers(categorySlug, offersArtifact)
+    ]);
+    return;
+  }
+
+  await Promise.all([
+    artifacts.deleteCategoryCountry(categorySlug, countryCode),
+    artifacts.deleteCategoryOffers(categorySlug, countryCode)
+  ]);
+}
+
+export async function materializeDirectoryArtifacts(
+  artifacts: ArtifactStore,
+  repositories: Repositories,
+  now: string,
+  input: SkillArtifactBaseInput
+): Promise<void> {
+  const categories = await repositories.listCategories();
+  await materializeSkillArtifacts(artifacts, categories.filter((category) => category.isPublished !== false), input, now);
 }
 
 export async function ensureCategoriesArtifact(
@@ -181,7 +222,7 @@ export async function ensureRootSkillArtifact(
   }
 
   const categories = await repositories.listCategories();
-  const skill = renderRootSkillTemplate(buildRootSkillInput(input, categories));
+  const skill = renderRootSkillTemplate(buildRootSkillInput(input, categories.filter((category) => category.isPublished !== false)));
   await artifacts.putRootSkill(skill);
   return skill;
 }
@@ -243,7 +284,7 @@ export async function materializePublicArtifacts(
   since?: string
 ): Promise<void> {
   const categories = await repositories.listCategories();
-  await materializeSkillArtifacts(artifacts, categories, input, now);
+  await materializeSkillArtifacts(artifacts, categories.filter((category) => category.isPublished !== false), input, now);
 
   await Promise.all(
     categories.map(async (category) => {
@@ -296,24 +337,41 @@ export async function materializeMerchantArtifacts(
 
       await Promise.all(
         Array.from(affectedCountries).map(async (countryCode) => {
-          if (await repositories.supportsCountryForCategory(categorySlug, countryCode)) {
-            const [countryArtifact, offersArtifact] = await Promise.all([
-              buildCategoryCountryArtifact(repositories, categorySlug, countryCode, now),
-              buildCategoryOffersArtifact(repositories, categorySlug, countryCode, now)
-            ]);
-
-            await Promise.all([
-              artifacts.putCategoryCountry(categorySlug, countryArtifact),
-              artifacts.putCategoryOffers(categorySlug, offersArtifact)
-            ]);
-          } else {
-            await Promise.all([
-              artifacts.deleteCategoryCountry(categorySlug, countryCode),
-              artifacts.deleteCategoryOffers(categorySlug, countryCode)
-            ]);
-          }
+          await refreshCategoryCountryArtifacts(artifacts, repositories, categorySlug, countryCode, now);
         })
       );
     })
+  );
+}
+
+export async function materializeOfferArtifacts(
+  artifacts: ArtifactStore,
+  repositories: Repositories,
+  offer: OfferRefreshInput,
+  now: string,
+  previousOffer?: OfferRefreshInput | null
+): Promise<void> {
+  const [merchant, previousMerchant] = await Promise.all([
+    repositories.getMerchant(offer.merchantSlug),
+    previousOffer ? repositories.getMerchant(previousOffer.merchantSlug) : Promise.resolve(null)
+  ]);
+
+  const affectedCountries = new Set([
+    ...(previousOffer?.countryCodes ?? []),
+    ...offer.countryCodes
+  ]);
+  const affectedCategories = new Set([
+    ...(merchant?.categorySlugs ?? []),
+    ...(previousMerchant?.categorySlugs ?? [])
+  ]);
+
+  await Promise.all(
+    Array.from(affectedCategories).map((categorySlug) =>
+      Promise.all(
+        Array.from(affectedCountries).map((countryCode) =>
+          refreshCategoryCountryArtifacts(artifacts, repositories, categorySlug, countryCode, now)
+        )
+      )
+    )
   );
 }

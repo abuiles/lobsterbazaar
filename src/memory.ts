@@ -130,6 +130,14 @@ export class MemoryRepositories implements Repositories {
   private readonly claims = new Map<string, MerchantClaim>();
   private readonly claws = new Map<string, Claw>();
 
+  private isCategoryPublished(category: Category | undefined): boolean {
+    return category?.isPublished !== false;
+  }
+
+  private isMerchantPublished(merchant: Merchant | undefined): boolean {
+    return merchant?.isPublished !== false;
+  }
+
   async createClaw(input: RegisterClawInput, deployId: string): Promise<RegisterClawResult> {
     if (input.role === "merchant") {
       if (!input.merchantSlug) {
@@ -174,8 +182,20 @@ export class MemoryRepositories implements Repositories {
     return this.categories.get(slug) ?? null;
   }
 
+  async getOffer(offerId: string): Promise<Offer | null> {
+    return this.offers.get(offerId) ?? null;
+  }
+
   async listCategories(): Promise<Category[]> {
     return Array.from(this.categories.values()).sort((left, right) => left.slug.localeCompare(right.slug));
+  }
+
+  async listMerchants(): Promise<Merchant[]> {
+    return Array.from(this.merchants.values()).sort((left, right) => left.slug.localeCompare(right.slug));
+  }
+
+  async listOffers(): Promise<Offer[]> {
+    return Array.from(this.offers.values()).sort((left, right) => left.offerId.localeCompare(right.offerId));
   }
 
   async listCountryMerchants(countryCode: string, now: string): Promise<CountryMerchantSummary[]> {
@@ -183,6 +203,7 @@ export class MemoryRepositories implements Repositories {
     const activeCounts = await this.listActiveOfferCounts(normalized, now);
 
     return Array.from(this.merchants.values())
+      .filter((merchant) => this.isMerchantPublished(merchant))
       .filter((merchant) => merchant.countryCodes.includes(normalized))
       .map((merchant) => ({
         slug: merchant.slug,
@@ -211,6 +232,7 @@ export class MemoryRepositories implements Repositories {
     const activeCounts = await this.listActiveOfferCountsForCategory(normalizedCategory, normalizedCountry, now);
 
     return Array.from(this.merchants.values())
+      .filter((merchant) => this.isMerchantPublished(merchant))
       .filter((merchant) => merchant.categorySlugs.includes(normalizedCategory))
       .filter((merchant) => merchant.countryCodes.includes(normalizedCountry))
       .map((merchant) => ({
@@ -234,6 +256,7 @@ export class MemoryRepositories implements Repositories {
     const activeCounts = await this.listActiveOfferCounts(undefined, now);
 
     return Array.from(this.merchants.values())
+      .filter((merchant) => this.isMerchantPublished(merchant))
       .filter((merchant) => merchant.verticalMetadata.featured === true)
       .map((merchant) => ({
         slug: merchant.slug,
@@ -254,18 +277,26 @@ export class MemoryRepositories implements Repositories {
 
   async supportsCountry(countryCode: string): Promise<boolean> {
     const normalized = normalizeCountryCode(countryCode);
-    return Array.from(this.merchants.values()).some((merchant) => merchant.countryCodes.includes(normalized));
+    return Array.from(this.merchants.values()).some((merchant) =>
+      this.isMerchantPublished(merchant) && merchant.countryCodes.includes(normalized)
+    );
   }
 
   async supportsCategory(slug: string): Promise<boolean> {
-    return this.categories.has(slug.trim());
+    return this.isCategoryPublished(this.categories.get(slug.trim()));
   }
 
   async supportsCountryForCategory(categorySlug: string, countryCode: string): Promise<boolean> {
     const normalizedCategory = categorySlug.trim();
     const normalizedCountry = normalizeCountryCode(countryCode);
+    if (!this.isCategoryPublished(this.categories.get(normalizedCategory))) {
+      return false;
+    }
+
     return Array.from(this.merchants.values()).some((merchant) =>
-      merchant.categorySlugs.includes(normalizedCategory) && merchant.countryCodes.includes(normalizedCountry)
+      this.isMerchantPublished(merchant)
+      && merchant.categorySlugs.includes(normalizedCategory)
+      && merchant.countryCodes.includes(normalizedCountry)
     );
   }
 
@@ -275,6 +306,7 @@ export class MemoryRepositories implements Repositories {
     return Array.from(this.offers.values())
       .filter((offer) => offer.countryCodes.includes(normalized))
       .filter((offer) => isOfferActive(offer, now))
+      .filter((offer) => this.isMerchantPublished(this.merchants.get(offer.merchantSlug)))
       .sort((left, right) => {
         if (left.priority !== right.priority) {
           return right.priority - left.priority;
@@ -308,7 +340,10 @@ export class MemoryRepositories implements Repositories {
     return Array.from(this.offers.values())
       .filter((offer) => offer.countryCodes.includes(normalizedCountry))
       .filter((offer) => isOfferActive(offer, now))
-      .filter((offer) => this.merchants.get(offer.merchantSlug)?.categorySlugs.includes(normalizedCategory) === true)
+      .filter((offer) => {
+        const merchant = this.merchants.get(offer.merchantSlug);
+        return this.isMerchantPublished(merchant) && merchant?.categorySlugs.includes(normalizedCategory) === true;
+      })
       .sort((left, right) => {
         if (left.priority !== right.priority) {
           return right.priority - left.priority;
@@ -344,6 +379,7 @@ export class MemoryRepositories implements Repositories {
     return Array.from(this.offers.values())
       .filter((offer) => offer.merchantSlug === merchantSlug)
       .filter((offer) => isOfferActive(offer, now))
+      .filter(() => this.isMerchantPublished(merchant))
       .sort((left, right) => {
         if (left.priority !== right.priority) {
           return right.priority - left.priority;
@@ -366,8 +402,8 @@ export class MemoryRepositories implements Repositories {
   async listMerchantArtifacts(now: string, since?: string): Promise<MerchantArtifact[]> {
     const merchants = Array.from(this.merchants.values());
     const sourceMerchants = since
-      ? merchants.filter((merchant) => merchant.createdAt > since)
-      : merchants;
+      ? merchants.filter((merchant) => merchant.createdAt > since && this.isMerchantPublished(merchant))
+      : merchants.filter((merchant) => this.isMerchantPublished(merchant));
 
     const activeCounts = await this.listActiveOfferCounts(undefined, now);
 
@@ -387,7 +423,7 @@ export class MemoryRepositories implements Repositories {
   async listMerchantArtifactsForCategory(categorySlug: string, now: string, since?: string): Promise<MerchantArtifact[]> {
     const normalizedCategory = categorySlug.trim();
     const merchants = Array.from(this.merchants.values()).filter((merchant) =>
-      merchant.categorySlugs.includes(normalizedCategory)
+      this.isMerchantPublished(merchant) && merchant.categorySlugs.includes(normalizedCategory)
     );
     const sourceMerchants = since
       ? merchants.filter((merchant) => merchant.createdAt > since)
@@ -409,7 +445,11 @@ export class MemoryRepositories implements Repositories {
 
   async listCountryCodes(): Promise<string[]> {
     return Array.from(
-      new Set(Array.from(this.merchants.values()).flatMap((merchant) => merchant.countryCodes))
+      new Set(
+        Array.from(this.merchants.values())
+          .filter((merchant) => this.isMerchantPublished(merchant))
+          .flatMap((merchant) => merchant.countryCodes)
+      )
     ).sort();
   }
 
@@ -418,19 +458,24 @@ export class MemoryRepositories implements Repositories {
     return Array.from(
       new Set(
         Array.from(this.merchants.values())
-          .filter((merchant) => merchant.categorySlugs.includes(normalizedCategory))
+          .filter((merchant) => this.isMerchantPublished(merchant) && merchant.categorySlugs.includes(normalizedCategory))
           .flatMap((merchant) => merchant.countryCodes)
       )
     ).sort();
   }
 
   async listCategorySlugs(): Promise<string[]> {
-    return Array.from(this.categories.keys()).sort();
+    return Array.from(this.categories.values())
+      .filter((category) => this.isCategoryPublished(category))
+      .map((category) => category.slug)
+      .sort();
   }
 
   async listMerchantSlugs(since?: string): Promise<string[]> {
     const merchants = Array.from(this.merchants.values());
-    const filteredMerchants = since ? merchants.filter((merchant) => merchant.createdAt > since) : merchants;
+    const filteredMerchants = since
+      ? merchants.filter((merchant) => merchant.createdAt > since && this.isMerchantPublished(merchant))
+      : merchants.filter((merchant) => this.isMerchantPublished(merchant));
 
     return filteredMerchants.map((merchant) => merchant.slug).sort();
   }
@@ -465,12 +510,13 @@ export class MemoryRepositories implements Repositories {
 
   async getMetricsSnapshot(now: string): Promise<MetricsSnapshot> {
     const merchants = Array.from(this.merchants.values());
+    const publishedMerchants = merchants.filter((merchant) => this.isMerchantPublished(merchant));
 
     return {
-      merchantCount: merchants.length,
+      merchantCount: publishedMerchants.length,
       activeOfferCount: Array.from(this.offers.values()).filter((offer) => isOfferActive(offer, now)).length,
-      claimedMerchantCount: merchants.filter((merchant) => merchant.claimStatus === "claimed").length,
-      countryCount: new Set(merchants.flatMap((merchant) => merchant.countryCodes)).size
+      claimedMerchantCount: publishedMerchants.filter((merchant) => merchant.claimStatus === "claimed").length,
+      countryCount: new Set(publishedMerchants.flatMap((merchant) => merchant.countryCodes)).size
     };
   }
 

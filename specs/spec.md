@@ -216,6 +216,7 @@ Use `D1` for:
 - merchant claims
 - merchant MCP connection metadata
 - active offers
+- materialization target state and debounce metadata
 
 This is the mutable, relational part of the system.
 
@@ -238,6 +239,8 @@ Think of it this way:
 
 - `D1` decides what exists, who controls it, and what is active.
 - `R2` is what claws and public surfaces mostly read.
+
+With async publish, `D1` also records which derived artifacts are dirty and whether background materialization is pending, running, ready, or failed.
 
 ## Recommended V0 Architecture
 
@@ -1238,6 +1241,47 @@ The important rule is:
 
 - `D1` holds the mutable source record
 - `R2` holds the public read artifact
+
+Between those two layers, a materialization workflow is responsible for bringing `R2` up to date after control-plane writes.
+
+## Async materialization model
+
+Normal operator writes do not materialize public artifacts inline.
+
+Instead:
+
+1. the write commits merchant, offer, category, or claim state to `D1`
+2. the write marks a materialization target dirty
+3. the request returns immediately with materialization metadata
+4. a debounced workflow refreshes the derived `R2` artifacts in the background
+
+### Materialization targets
+
+The control plane tracks durable targets keyed by type and key:
+
+- `merchant:{slug}` for merchant-scoped refresh work
+- `directory:root` for category and root directory refresh work
+
+Each target tracks:
+
+- `desired_generation`
+- `processed_generation`
+- `status`
+- `first_dirty_at`
+- `last_dirty_at`
+- `last_started_at`
+- `last_completed_at`
+- `last_error`
+
+### Debounce policy
+
+The default policy is:
+
+- wait for 2 minutes of quiet before running
+- force one run within 5 minutes of the first dirty write
+- coalesce repeated writes into the latest generation for that target
+
+This keeps operator edits responsive while avoiding a D1 query storm during bursty review activity.
 
 ## Cart provenance rule
 
@@ -2467,6 +2511,7 @@ The current operator-only internal endpoints are:
 - `PATCH /internal/offers/{offerId}`
 - `POST /internal/offers/{offerId}/unpublish`
 - `POST /internal/import/merchant`
+- `GET /internal/materialization-targets`
 - `POST /internal/materialize`
 - `POST /internal/metrics/materialize`
 
@@ -2652,11 +2697,15 @@ It should:
 
 - upsert the merchant row
 - upsert the claim row
-- refresh only the affected merchant, country, and offers artifacts
+- mark the affected merchant target dirty
+- return `materialization` metadata immediately instead of waiting for artifact refresh
+- let the debounced workflow refresh only the affected merchant, country, and offers artifacts
 - avoid full-directory materialization on normal dashboard edits
 - delete stale cached merchant artifacts when category membership changes
 
 `POST /internal/materialize` remains the explicit full rebuild path.
+
+`GET /internal/materialization-targets` exposes the async state of dirty, running, ready, and failed targets for operator tooling.
 
 The rest of the internal admin surface is for operator-managed data after publish:
 

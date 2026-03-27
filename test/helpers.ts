@@ -1,4 +1,6 @@
 import { createApp } from "../src/app";
+import { materializeDirectoryArtifacts, materializeDirtyMerchantArtifacts } from "../src/artifacts";
+import type { MaterializationScheduler } from "../src/materialization-scheduler";
 import { MemoryArtifactStore, MemoryRepositories } from "../src/memory";
 
 interface TestHarnessOptions {
@@ -6,6 +8,7 @@ interface TestHarnessOptions {
   includeSeedOffers?: boolean;
   metricsDataset?: AnalyticsEngineDataset;
   repositories?: MemoryRepositories;
+  materializationScheduler?: MaterializationScheduler;
 }
 
 export class RecordingMetricsDataset {
@@ -13,6 +16,40 @@ export class RecordingMetricsDataset {
 
   writeDataPoint(data: AnalyticsEngineDataPoint): void {
     this.writes.push(data);
+  }
+}
+
+class InlineMaterializationScheduler implements MaterializationScheduler {
+  constructor(
+    private readonly artifacts: MemoryArtifactStore,
+    private readonly repositories: MemoryRepositories,
+    private readonly now: () => string,
+  ) {}
+
+  async scheduleTarget(target: Awaited<ReturnType<MemoryRepositories["markMaterializationTargetDirty"]>>): Promise<void> {
+    const now = this.now();
+    await this.repositories.markMaterializationTargetRunning(target.targetType, target.targetKey, now);
+
+    if (target.targetType === "directory") {
+      await materializeDirectoryArtifacts(this.artifacts, this.repositories, now, {
+        brandName: "Lobster Bazaar",
+        deployId: "lobsterbrew",
+        deployDomain: "lobsterbrew.test",
+        directorySummary: "Coffee-oriented merchant discovery for lobsters.",
+        registerPath: "/claws/register",
+      });
+    } else {
+      await materializeDirtyMerchantArtifacts(
+        this.artifacts,
+        this.repositories,
+        target.targetKey,
+        now,
+        target.affectedCategorySlugs,
+        target.affectedCountryCodes,
+      );
+    }
+
+    await this.repositories.markMaterializationTargetReady(target.targetType, target.targetKey, target.desiredGeneration, now);
   }
 }
 
@@ -159,6 +196,7 @@ export async function createTestHarness(options: TestHarnessOptions = {}) {
         }
       ]
     },
+    materializationScheduler: options.materializationScheduler ?? new InlineMaterializationScheduler(artifacts, repositories, () => "2026-03-15T12:00:00Z"),
     metrics: metrics as unknown as AnalyticsEngineDataset,
     operatorToken: "test-operator-token",
     now: () => "2026-03-15T12:00:00Z"

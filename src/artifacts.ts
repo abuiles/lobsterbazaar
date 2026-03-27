@@ -129,6 +129,32 @@ async function refreshCategoryCountryArtifacts(
   ]);
 }
 
+export async function materializeDirtyMerchantArtifacts(
+  artifacts: ArtifactStore,
+  repositories: Repositories,
+  merchantSlug: string,
+  now: string,
+  affectedCategorySlugs: string[],
+  affectedCountryCodes: string[],
+): Promise<void> {
+  const categorySlugs = Array.from(new Set(affectedCategorySlugs.map((value) => value.trim()).filter(Boolean)));
+  const countryCodes = Array.from(new Set(affectedCountryCodes.map((value) => value.trim()).filter(Boolean)));
+
+  for (const categorySlug of categorySlugs) {
+    const currentArtifact = await repositories.getMerchantArtifactForCategory(merchantSlug, categorySlug, now);
+
+    if (currentArtifact) {
+      await artifacts.putCategoryMerchant(categorySlug, currentArtifact);
+    } else {
+      await artifacts.deleteCategoryMerchant(categorySlug, merchantSlug);
+    }
+
+    for (const countryCode of countryCodes) {
+      await refreshCategoryCountryArtifacts(artifacts, repositories, categorySlug, countryCode, now);
+    }
+  }
+}
+
 export async function materializeDirectoryArtifacts(
   artifacts: ArtifactStore,
   repositories: Repositories,
@@ -323,24 +349,13 @@ export async function materializeMerchantArtifacts(
     ...(currentMerchant?.countryCodes ?? [])
   ]);
 
-  await Promise.all(
-    Array.from(affectedCategories).map(async (categorySlug) => {
-      const currentArtifact = currentMerchant?.categorySlugs.includes(categorySlug)
-        ? (await repositories.listMerchantArtifactsForCategory(categorySlug, now)).find((merchant) => merchant.slug === merchantSlug) ?? null
-        : null;
-
-      if (currentArtifact) {
-        await artifacts.putCategoryMerchant(categorySlug, currentArtifact);
-      } else {
-        await artifacts.deleteCategoryMerchant(categorySlug, merchantSlug);
-      }
-
-      await Promise.all(
-        Array.from(affectedCountries).map(async (countryCode) => {
-          await refreshCategoryCountryArtifacts(artifacts, repositories, categorySlug, countryCode, now);
-        })
-      );
-    })
+  await materializeDirtyMerchantArtifacts(
+    artifacts,
+    repositories,
+    merchantSlug,
+    now,
+    Array.from(affectedCategories),
+    Array.from(affectedCountries),
   );
 }
 

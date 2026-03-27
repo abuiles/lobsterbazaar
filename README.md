@@ -59,10 +59,13 @@ The Worker currently provides:
 - `PATCH /internal/offers/{offerId}`
 - `POST /internal/offers/{offerId}/unpublish`
 - `POST /internal/import/merchant`
+- `GET /internal/materialization-targets`
 - `POST /internal/materialize`
 - `POST /internal/metrics/materialize`
 
 `D1` is the control plane. `R2` is the public artifact plane.
+
+Normal operator writes are async by default. Merchant, offer, and category mutations commit control-plane state to `D1`, mark a materialization target dirty, and return immediately. A debounced Cloudflare Workflow refreshes public artifacts after a quiet window instead of doing the full refresh inline in the request.
 
 Root aggregated country discovery is intentionally out of scope for V1. The canonical path is always category first.
 
@@ -125,6 +128,7 @@ npx wrangler d1 execute lobsterbazaar --local --file migrations/0001_init.sql
 npx wrangler d1 execute lobsterbazaar --local --file migrations/0002_categories.sql
 npx wrangler d1 execute lobsterbazaar --local --file migrations/0003_category_presentation.sql
 npx wrangler d1 execute lobsterbazaar --local --file migrations/0004_publish_state.sql
+npx wrangler d1 execute lobsterbazaar --local --file migrations/0005_materialization_targets.sql
 npx wrangler d1 execute lobsterbazaar --local --file seeds/example.sql
 ```
 
@@ -245,10 +249,14 @@ That route:
 
 - upserts the merchant row
 - upserts the claim row
-- refreshes only the affected merchant, category-country, and offers artifacts
-- deletes stale merchant artifacts when category membership is removed
+- marks the affected merchant target dirty in `materialization_targets`
+- returns immediately with `materialization` status metadata
+- lets the debounced materialization workflow refresh the affected merchant, category-country, and offers artifacts
+- still deletes stale merchant artifacts when category membership is removed during the background refresh
 
 Use `POST /internal/materialize` only when you explicitly want a full rebuild.
+
+Use `GET /internal/materialization-targets` when you need to inspect async publish state. Targets expose status and generation fields so operator tooling can tell whether a write is still waiting, running, ready, or failed.
 
 For direct operator management after publish, use the new internal admin routes:
 
@@ -257,6 +265,16 @@ For direct operator management after publish, use the new internal admin routes:
 - offers: list, create, patch, unpublish
 
 Soft unpublish is the default removal path for categories and merchants. Offer removal is represented by moving the offer out of the public `active` state.
+
+## Async materialization model
+
+`materialization_targets` is the durable control-plane queue for derived artifact refreshes.
+
+- Merchant writes dirty a `merchant:{slug}` target.
+- Category writes dirty the shared `directory:root` target.
+- Writes coalesce by generation, so repeated edits in a burst do not trigger one refresh per request.
+- The workflow waits for a 2 minute quiet window and forces a run within 5 minutes of the first dirty write.
+- `POST /internal/materialize` remains the explicit full rebuild path for bulk publish operations.
 
 To process only records added after a timestamp:
 

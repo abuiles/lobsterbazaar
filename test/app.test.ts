@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createApp } from "../src/app";
+import { materializeDirtyMerchantArtifacts } from "../src/artifacts";
+import { NoopMaterializationScheduler } from "../src/materialization-scheduler";
 import { MemoryArtifactStore, MemoryRepositories } from "../src/memory";
 import { createTestHarness, requestJson, requestText, RecordingMetricsDataset } from "./helpers";
 
@@ -103,6 +105,38 @@ function lastMetricWrite(metrics: { writes: AnalyticsEngineDataPoint[] }): Analy
   const metric = metrics.writes.at(-1);
   expect(metric).toBeDefined();
   return metric as AnalyticsEngineDataPoint;
+}
+
+async function drainMerchantMaterialization(
+  artifacts: MemoryArtifactStore,
+  repositories: MemoryRepositories,
+  merchantSlug: string,
+  now: string,
+): Promise<void> {
+  const target = await repositories.getMaterializationTarget("merchant", merchantSlug);
+  expect(target).not.toBeNull();
+  if (!target) {
+    return;
+  }
+
+  const merchant = await repositories.getMerchant(merchantSlug);
+  const affectedCategorySlugs = target.affectedCategorySlugs.length > 0
+    ? target.affectedCategorySlugs
+    : merchant?.categorySlugs ?? [];
+  const affectedCountryCodes = target.affectedCountryCodes.length > 0
+    ? target.affectedCountryCodes
+    : merchant?.countryCodes ?? [];
+
+  await repositories.markMaterializationTargetRunning("merchant", merchantSlug, now);
+  await materializeDirtyMerchantArtifacts(
+    artifacts,
+    repositories,
+    merchantSlug,
+    now,
+    affectedCategorySlugs,
+    affectedCountryCodes,
+  );
+  await repositories.markMaterializationTargetReady("merchant", merchantSlug, target.desiredGeneration, now);
 }
 
 class LandingRepositories extends MemoryRepositories {
@@ -208,6 +242,7 @@ describe("lobsterbazaar worker", () => {
           "[built by @abuiles](https://x.com/abuiles)"
         ].join("\n")
       },
+      materializationScheduler: new NoopMaterializationScheduler(),
       metrics: new RecordingMetricsDataset() as unknown as AnalyticsEngineDataset,
       operatorToken: "test-operator-token",
       now: () => "2026-03-15T12:00:00Z"
@@ -977,7 +1012,7 @@ describe("lobsterbazaar worker", () => {
     expect(body.error.code).toBe("bad_request");
   });
 
-  it("imports an approved merchant submission and materializes only the affected merchant artifacts", async () => {
+  it("imports an approved merchant submission and queues merchant materialization metadata", async () => {
     const { app, artifacts, repositories } = await createTestHarness({ includeSeedOffers: false });
 
     const response = await app.fetch(
@@ -1023,7 +1058,14 @@ describe("lobsterbazaar worker", () => {
       ok: true,
       merchant_slug: "atlas-roasters",
       claim_id: "claim_atlas_roasters",
-      materialized: true
+      materialized: false,
+      materialization: expect.objectContaining({
+        targetType: "merchant",
+        targetKey: "atlas-roasters",
+        status: "debouncing",
+        desiredGeneration: 1,
+        processedGeneration: 0,
+      }),
     });
 
     const merchant = await repositories.getMerchant("atlas-roasters");
@@ -1040,6 +1082,195 @@ describe("lobsterbazaar worker", () => {
     expect(await artifacts.getRootSkill()).toBeNull();
     expect(await artifacts.getCategoryMerchant("coffee", "atlas-roasters")).not.toBeNull();
     expect((await artifacts.getCategoryCountry("coffee", "US"))?.merchants.map((item) => item.slug)).toContain("atlas-roasters");
+  });
+
+  it("publishes and unpublishes merchants through the async materialization queue", async () => {
+    const artifacts = new MemoryArtifactStore();
+    const repositories = new MemoryRepositories();
+
+    await repositories.putCategory({
+      slug: "coffee",
+      name: "Coffee",
+      summary: "Coffee-oriented merchant discovery for lobsters."
+    });
+
+    const app = createApp({
+      artifacts,
+      repositories,
+      config: {
+        brandName: "Lobster Bazaar",
+        deployId: "lobsterbrew",
+        deployDomain: "lobsterbrew.test",
+        verticalId: "coffee",
+        verticalSummary: "Coffee-oriented merchant discovery for lobsters.",
+        skillBuyingTargets: "coffee, subscriptions, and brewing gear",
+        mascotUrl: "/assets/mascots/lobsterbazaar-default.jpg",
+        emoji: "🦞",
+        directoryVerticals: [],
+      },
+      materializationScheduler: new NoopMaterializationScheduler(),
+      metrics: new RecordingMetricsDataset() as unknown as AnalyticsEngineDataset,
+      operatorToken: "test-operator-token",
+      now: () => "2026-03-15T12:00:00Z",
+    });
+
+    const importResponse = await requestJson<{
+      ok: boolean;
+      merchant_slug: string;
+      materialized: boolean;
+      materialization: {
+        targetType: string;
+        targetKey: string;
+        status: string;
+        desiredGeneration: number;
+        processedGeneration: number;
+      };
+    }>(app, "/internal/import/merchant", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-operator-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        source: {
+          submissionId: "sub_async_1",
+          reviewedBy: "Ops Reviewer",
+        },
+        merchant: {
+          slug: "atlas-roasters",
+          displayName: "Atlas Roasters",
+          storeUrl: "https://atlas-roasters.example.com",
+          countryCodes: ["US"],
+          categorySlugs: ["coffee"],
+          notes: "Queued from the dashboard.",
+          claimContact: "ops@atlas-roasters.example.com",
+        },
+        claim: {
+          claimId: "claim_atlas_roasters",
+          status: "approved",
+          contact: "ops@atlas-roasters.example.com",
+        },
+      }),
+    });
+
+    expect(importResponse.response.status).toBe(200);
+    expect(importResponse.body.ok).toBe(true);
+    expect(importResponse.body.materialization).toMatchObject({
+      targetType: "merchant",
+      targetKey: "atlas-roasters",
+      status: "debouncing",
+      desiredGeneration: 1,
+      processedGeneration: 0,
+    });
+    await drainMerchantMaterialization(artifacts, repositories, "atlas-roasters", "2026-03-15T12:03:00Z");
+
+    const publishedMerchant = await requestJson<CategoryMerchantResponse>(app, "/coffee/merchants/atlas-roasters");
+    expect(publishedMerchant.response.status).toBe(200);
+    expect(publishedMerchant.body.merchant.slug).toBe("atlas-roasters");
+
+    const unpublishResponse = await requestJson<{ merchant: { isPublished?: boolean }; materialization: { desiredGeneration: number; processedGeneration: number; status: string } }>(
+      app,
+      "/internal/merchants/atlas-roasters/unpublish",
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-operator-token"
+        }
+      }
+    );
+
+    expect(unpublishResponse.response.status).toBe(200);
+    expect(unpublishResponse.body.merchant.isPublished).toBe(false);
+    expect(unpublishResponse.body.materialization).toMatchObject({
+      desiredGeneration: 2,
+      processedGeneration: 1,
+      status: "debouncing",
+    });
+
+    const staleMerchant = await requestJson<CategoryMerchantResponse>(app, "/coffee/merchants/atlas-roasters");
+    expect(staleMerchant.response.status).toBe(404);
+
+    await drainMerchantMaterialization(artifacts, repositories, "atlas-roasters", "2026-03-15T12:06:00Z");
+
+    const hiddenMerchant = await requestJson<ErrorResponse>(app, "/coffee/merchants/atlas-roasters");
+    expect(hiddenMerchant.response.status).toBe(404);
+    expect((await requestJson<ErrorResponse>(app, "/coffee/countries/US")).response.status).toBe(404);
+  });
+
+  it("returns materialization targets for async operator writes", async () => {
+    const artifacts = new MemoryArtifactStore();
+    const repositories = new MemoryRepositories();
+
+    await repositories.putCategory({
+      slug: "coffee",
+      name: "Coffee",
+      summary: "Coffee-oriented merchant discovery for lobsters."
+    });
+
+    const app = createApp({
+      artifacts,
+      repositories,
+      config: {
+        brandName: "Lobster Bazaar",
+        deployId: "lobsterbrew",
+        deployDomain: "lobsterbrew.test",
+        verticalId: "coffee",
+        verticalSummary: "Coffee-oriented merchant discovery for lobsters.",
+        skillBuyingTargets: "coffee, subscriptions, and brewing gear",
+        mascotUrl: "/assets/mascots/lobsterbazaar-default.jpg",
+        emoji: "🦞",
+        directoryVerticals: [],
+      },
+      materializationScheduler: new NoopMaterializationScheduler(),
+      metrics: new RecordingMetricsDataset() as unknown as AnalyticsEngineDataset,
+      operatorToken: "test-operator-token",
+      now: () => "2026-03-15T12:00:00Z",
+    });
+
+    const response = await app.fetch(
+      new Request("https://lobsterbrew.test/internal/import/merchant", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer test-operator-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          source: { submissionId: "sub_123", reviewedBy: "Ops Reviewer" },
+          merchant: {
+            slug: "atlas-roasters",
+            displayName: "Atlas Roasters",
+            storeUrl: "https://atlas-roasters.example.com",
+            countryCodes: ["US"],
+            categorySlugs: ["coffee"],
+          },
+          claim: {
+            claimId: "claim_atlas_roasters",
+            status: "approved",
+          },
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await artifacts.getCategoryMerchant("coffee", "atlas-roasters")).toBeNull();
+
+    const targetsResponse = await requestJson<{ targets: Array<{ targetKey: string; status: string; desiredGeneration: number }> }>(
+      app,
+      "/internal/materialization-targets",
+      {
+        headers: {
+          authorization: "Bearer test-operator-token",
+        },
+      },
+    );
+
+    expect(targetsResponse.body.targets).toEqual([
+      expect.objectContaining({
+        targetKey: "atlas-roasters",
+        status: "debouncing",
+        desiredGeneration: 1,
+      }),
+    ]);
   });
 
   it("updates existing merchants programmatically and drops removed category artifacts", async () => {
@@ -1117,6 +1348,28 @@ describe("lobsterbazaar worker", () => {
 
     const publicMerchant = await requestText(app, "/coffee/merchants/claimed-roaster.md");
     expect(publicMerchant.body).toContain("# Claimed Roaster Edited");
+
+    const unpublishResponse = await requestJson<{ merchant: { isPublished?: boolean } }>(app, "/internal/merchants/claimed-roaster/unpublish", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-operator-token"
+      }
+    });
+
+    expect(unpublishResponse.response.status).toBe(200);
+    expect(unpublishResponse.body.merchant.isPublished).toBe(false);
+
+    const hiddenMerchant = await requestJson<ErrorResponse>(app, "/coffee/merchants/claimed-roaster");
+    expect(hiddenMerchant.response.status).toBe(404);
+  });
+
+  it("removes cached merchant detail artifacts immediately when unpublishing a merchant", async () => {
+    const { app } = await createTestHarness({
+      materializationScheduler: new NoopMaterializationScheduler()
+    });
+
+    const cachedMerchant = await requestJson<CategoryMerchantResponse>(app, "/coffee/merchants/claimed-roaster");
+    expect(cachedMerchant.response.status).toBe(200);
 
     const unpublishResponse = await requestJson<{ merchant: { isPublished?: boolean } }>(app, "/internal/merchants/claimed-roaster/unpublish", {
       method: "POST",

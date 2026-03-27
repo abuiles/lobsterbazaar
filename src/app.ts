@@ -3,9 +3,6 @@ import {
   ensureCategoryCountryArtifact,
   ensureCategoryMerchantArtifact,
   ensureCategoryOffersArtifact,
-  materializeDirectoryArtifacts,
-  materializeMerchantArtifacts,
-  materializeOfferArtifacts,
   ensurePublishedSkillArtifact,
   ensurePublishedSkillsIndexArtifact,
   ensureRootSkillArtifact,
@@ -25,16 +22,30 @@ import type {
 import { badRequest, notFound } from "./errors";
 import { errorResponse, html, isMethod, json, parseJson, text } from "./http";
 import { prepareRequestMetric, recordRequestMetric } from "./metrics";
+import {
+  buildMaterializationMetadata,
+  buildMaterializationWorkflowInstanceId,
+  getMaterializationTargetKeyForDirectory,
+  getMaterializationTargetKeyForMerchant,
+} from "./materialization";
+import type { MaterializationScheduler } from "./materialization-scheduler";
 import { normalizeCountryCode } from "./merchant";
 import { R2ArtifactStore } from "./r2";
 import { ROOT_SKILL_NAME } from "./skill";
 import { D1Repositories } from "./d1";
-import type { ArtifactStore, CreateCategoryInput, CreateOfferInput, Repositories } from "./storage";
+import type {
+  ArtifactStore,
+  CreateCategoryInput,
+  CreateOfferInput,
+  MaterializationTarget,
+  Repositories,
+} from "./storage";
 
 interface AppDependencies {
   artifacts: ArtifactStore;
   repositories: Repositories;
   config: ReturnType<typeof readDeployConfig>;
+  materializationScheduler: MaterializationScheduler;
   metrics?: AnalyticsEngineDataset;
   staticAssets?: Fetcher;
   operatorToken?: string;
@@ -160,6 +171,58 @@ function buildSkillArtifactInput(config: ReturnType<typeof readDeployConfig>) {
     categoriesPath: "/categories",
     registerPath: "/claws/register"
   };
+}
+
+function collectNormalizedStrings(values: Iterable<string>, normalize: (value: string) => string = (value) => value.trim()): string[] {
+  return Array.from(new Set(Array.from(values, (value) => normalize(value)).filter(Boolean))).sort();
+}
+
+async function queueMerchantMaterialization(
+  dependencies: Pick<AppDependencies, "repositories" | "materializationScheduler" | "now">,
+  input: {
+    merchantSlug: string;
+    categorySlugs: Iterable<string>;
+    countryCodes: Iterable<string>;
+    requestedBy?: string;
+  },
+): Promise<MaterializationTarget> {
+  const target = await dependencies.repositories.markMaterializationTargetDirty({
+    targetType: "merchant",
+    targetKey: getMaterializationTargetKeyForMerchant(input.merchantSlug),
+    requestedBy: input.requestedBy,
+    workflowInstanceId: buildMaterializationWorkflowInstanceId("merchant", input.merchantSlug, Date.now()),
+    affectedCategorySlugs: collectNormalizedStrings(input.categorySlugs),
+    affectedCountryCodes: collectNormalizedStrings(input.countryCodes, normalizeCountryCode),
+    now: dependencies.now(),
+  });
+
+  await dependencies.materializationScheduler.scheduleTarget(target);
+  return target;
+}
+
+async function queueDirectoryMaterialization(
+  dependencies: Pick<AppDependencies, "repositories" | "materializationScheduler" | "now">,
+  requestedBy?: string,
+): Promise<MaterializationTarget> {
+  const target = await dependencies.repositories.markMaterializationTargetDirty({
+    targetType: "directory",
+    targetKey: getMaterializationTargetKeyForDirectory(),
+    requestedBy,
+    workflowInstanceId: buildMaterializationWorkflowInstanceId("directory", getMaterializationTargetKeyForDirectory(), Date.now()),
+    now: dependencies.now(),
+  });
+
+  await dependencies.materializationScheduler.scheduleTarget(target);
+  return target;
+}
+
+async function deleteMerchantArtifacts(
+  dependencies: Pick<AppDependencies, "artifacts">,
+  merchantSlug: string,
+  categorySlugs: Iterable<string>,
+): Promise<void> {
+  const uniqueCategorySlugs = Array.from(new Set(Array.from(categorySlugs, (value) => value.trim()).filter(Boolean)));
+  await Promise.all(uniqueCategorySlugs.map((categorySlug) => dependencies.artifacts.deleteCategoryMerchant(categorySlug, merchantSlug)));
 }
 
 function normalizeWellKnownPath(pathname: string): string {
@@ -528,13 +591,11 @@ export function createApp(dependencies: AppDependencies) {
           requireOperatorAccess(request, dependencies.operatorToken);
           const payload = parseCategoryCreateRequest(await parseJson<CategoryMutationRequest>(request));
           await dependencies.repositories.putCategory(payload);
-          await materializeDirectoryArtifacts(
-            dependencies.artifacts,
-            dependencies.repositories,
-            dependencies.now(),
-            buildSkillArtifactInput(dependencies.config)
-          );
-          response = json({ category: await dependencies.repositories.getCategory(payload.slug) }, { status: 201 });
+          const materialization = await queueDirectoryMaterialization(dependencies, "operator");
+          response = json({
+            category: await dependencies.repositories.getCategory(payload.slug),
+            materialization: buildMaterializationMetadata(materialization),
+          }, { status: 201 });
         } else if (normalizedPath === "/internal/merchants" && isMethod(request, "GET")) {
           requireOperatorAccess(request, dependencies.operatorToken);
           const merchants = await dependencies.repositories.listMerchants();
@@ -561,17 +622,30 @@ export function createApp(dependencies: AppDependencies) {
               && (!countryCodeFilter || offer.countryCodes.includes(normalizeCountryCode(countryCodeFilter)))
             )
           });
+        } else if (normalizedPath === "/internal/materialization-targets" && isMethod(request, "GET")) {
+          requireOperatorAccess(request, dependencies.operatorToken);
+          response = json({
+            targets: await dependencies.repositories.listMaterializationTargets({
+              targetType: (parseStringQuery(url.searchParams.get("target_type")) as "merchant" | "directory" | undefined),
+              targetKey: parseStringQuery(url.searchParams.get("target_key")),
+              status: parseStringQuery(url.searchParams.get("status")) as MaterializationTarget["status"] | undefined,
+            }),
+          });
         } else if (normalizedPath === "/internal/offers" && isMethod(request, "POST")) {
           requireOperatorAccess(request, dependencies.operatorToken);
           const payload = parseOfferCreateRequest(await parseJson<OfferMutationRequest>(request));
           await dependencies.repositories.putOffer(payload);
-          await materializeOfferArtifacts(
-            dependencies.artifacts,
-            dependencies.repositories,
-            { merchantSlug: payload.merchantSlug, countryCodes: payload.countryCodes },
-            dependencies.now()
-          );
-          response = json({ offer: await dependencies.repositories.getOffer(payload.offerId) }, { status: 201 });
+          const merchant = await dependencies.repositories.getMerchant(payload.merchantSlug);
+          const materialization = await queueMerchantMaterialization(dependencies, {
+            merchantSlug: payload.merchantSlug,
+            categorySlugs: merchant?.categorySlugs ?? [],
+            countryCodes: payload.countryCodes,
+            requestedBy: "operator",
+          });
+          response = json({
+            offer: await dependencies.repositories.getOffer(payload.offerId),
+            materialization: buildMaterializationMetadata(materialization),
+          }, { status: 201 });
         } else {
           const internalCategoryUnpublishSlug = parseInternalActionSlug(normalizedPath, "categories", "unpublish");
           if (internalCategoryUnpublishSlug && isMethod(request, "POST")) {
@@ -585,13 +659,11 @@ export function createApp(dependencies: AppDependencies) {
               ...category,
               isPublished: false
             });
-            await materializeDirectoryArtifacts(
-              dependencies.artifacts,
-              dependencies.repositories,
-              dependencies.now(),
-              buildSkillArtifactInput(dependencies.config)
-            );
-            response = json({ category: await dependencies.repositories.getCategory(internalCategoryUnpublishSlug) });
+            const materialization = await queueDirectoryMaterialization(dependencies, "operator");
+            response = json({
+              category: await dependencies.repositories.getCategory(internalCategoryUnpublishSlug),
+              materialization: buildMaterializationMetadata(materialization),
+            });
           } else {
             const internalCategorySlug = parseInternalSlug(normalizedPath, "categories");
             if (internalCategorySlug && isMethod(request, "GET")) {
@@ -610,13 +682,11 @@ export function createApp(dependencies: AppDependencies) {
 
               const payload = mergeCategoryUpdate(existing, await parseJson<CategoryMutationRequest>(request));
               await dependencies.repositories.putCategory(payload);
-              await materializeDirectoryArtifacts(
-                dependencies.artifacts,
-                dependencies.repositories,
-                dependencies.now(),
-                buildSkillArtifactInput(dependencies.config)
-              );
-              response = json({ category: await dependencies.repositories.getCategory(internalCategorySlug) });
+              const materialization = await queueDirectoryMaterialization(dependencies, "operator");
+              response = json({
+                category: await dependencies.repositories.getCategory(internalCategorySlug),
+                materialization: buildMaterializationMetadata(materialization),
+              });
             } else {
               const internalMerchantUnpublishSlug = parseInternalActionSlug(normalizedPath, "merchants", "unpublish");
               if (internalMerchantUnpublishSlug && isMethod(request, "POST")) {
@@ -630,14 +700,18 @@ export function createApp(dependencies: AppDependencies) {
                   ...existing,
                   isPublished: false
                 });
-                await materializeMerchantArtifacts(
-                  dependencies.artifacts,
-                  dependencies.repositories,
-                  existing.slug,
-                  dependencies.now(),
-                  existing
-                );
-                response = json({ merchant: await dependencies.repositories.getMerchant(internalMerchantUnpublishSlug) });
+                const updated = await dependencies.repositories.getMerchant(internalMerchantUnpublishSlug);
+                await deleteMerchantArtifacts(dependencies, existing.slug, existing.categorySlugs);
+                const materialization = await queueMerchantMaterialization(dependencies, {
+                  merchantSlug: existing.slug,
+                  categorySlugs: new Set([...(existing.categorySlugs ?? []), ...(updated?.categorySlugs ?? [])]),
+                  countryCodes: new Set([...(existing.countryCodes ?? []), ...(updated?.countryCodes ?? [])]),
+                  requestedBy: "operator",
+                });
+                response = json({
+                  merchant: updated,
+                  materialization: buildMaterializationMetadata(materialization),
+                });
               } else {
                 const internalMerchantSlug = parseInternalSlug(normalizedPath, "merchants");
                 if (internalMerchantSlug && isMethod(request, "GET")) {
@@ -656,14 +730,20 @@ export function createApp(dependencies: AppDependencies) {
 
                   const payload = mergeMerchantUpdate(existing, await parseJson<MerchantMutationRequest>(request));
                   await dependencies.repositories.putMerchant(payload);
-                  await materializeMerchantArtifacts(
-                    dependencies.artifacts,
-                    dependencies.repositories,
-                    existing.slug,
-                    dependencies.now(),
-                    existing
-                  );
-                  response = json({ merchant: await dependencies.repositories.getMerchant(internalMerchantSlug) });
+                  const updated = await dependencies.repositories.getMerchant(internalMerchantSlug);
+                  if (updated && updated.isPublished === false) {
+                    await deleteMerchantArtifacts(dependencies, existing.slug, new Set([...(existing.categorySlugs ?? []), ...(updated.categorySlugs ?? [])]));
+                  }
+                  const materialization = await queueMerchantMaterialization(dependencies, {
+                    merchantSlug: existing.slug,
+                    categorySlugs: new Set([...(existing.categorySlugs ?? []), ...(updated?.categorySlugs ?? [])]),
+                    countryCodes: new Set([...(existing.countryCodes ?? []), ...(updated?.countryCodes ?? [])]),
+                    requestedBy: "operator",
+                  });
+                  response = json({
+                    merchant: updated,
+                    materialization: buildMaterializationMetadata(materialization),
+                  });
                 } else {
                   const internalOfferUnpublishId = parseInternalActionSlug(normalizedPath, "offers", "unpublish");
                   if (internalOfferUnpublishId && isMethod(request, "POST")) {
@@ -677,14 +757,17 @@ export function createApp(dependencies: AppDependencies) {
                       ...existing,
                       status: "draft"
                     });
-                    await materializeOfferArtifacts(
-                      dependencies.artifacts,
-                      dependencies.repositories,
-                      { merchantSlug: existing.merchantSlug, countryCodes: existing.countryCodes },
-                      dependencies.now(),
-                      { merchantSlug: existing.merchantSlug, countryCodes: existing.countryCodes }
-                    );
-                    response = json({ offer: await dependencies.repositories.getOffer(internalOfferUnpublishId) });
+                    const merchant = await dependencies.repositories.getMerchant(existing.merchantSlug);
+                    const materialization = await queueMerchantMaterialization(dependencies, {
+                      merchantSlug: existing.merchantSlug,
+                      categorySlugs: merchant?.categorySlugs ?? [],
+                      countryCodes: existing.countryCodes,
+                      requestedBy: "operator",
+                    });
+                    response = json({
+                      offer: await dependencies.repositories.getOffer(internalOfferUnpublishId),
+                      materialization: buildMaterializationMetadata(materialization),
+                    });
                   } else {
                     const internalOfferId = parseInternalSlug(normalizedPath, "offers");
                     if (internalOfferId && isMethod(request, "GET")) {
@@ -703,14 +786,26 @@ export function createApp(dependencies: AppDependencies) {
 
                       const payload = mergeOfferUpdate(existing, await parseJson<OfferMutationRequest>(request));
                       await dependencies.repositories.putOffer(payload);
-                      await materializeOfferArtifacts(
-                        dependencies.artifacts,
-                        dependencies.repositories,
-                        { merchantSlug: payload.merchantSlug, countryCodes: payload.countryCodes },
-                        dependencies.now(),
-                        { merchantSlug: existing.merchantSlug, countryCodes: existing.countryCodes }
-                      );
-                      response = json({ offer: await dependencies.repositories.getOffer(internalOfferId) });
+                      const merchant = await dependencies.repositories.getMerchant(payload.merchantSlug);
+                      const materialization = await queueMerchantMaterialization(dependencies, {
+                        merchantSlug: payload.merchantSlug,
+                        categorySlugs: merchant?.categorySlugs ?? [],
+                        countryCodes: new Set([...(existing.countryCodes ?? []), ...(payload.countryCodes ?? [])]),
+                        requestedBy: "operator",
+                      });
+                      if (existing.merchantSlug !== payload.merchantSlug) {
+                        const previousMerchant = await dependencies.repositories.getMerchant(existing.merchantSlug);
+                        await queueMerchantMaterialization(dependencies, {
+                          merchantSlug: existing.merchantSlug,
+                          categorySlugs: previousMerchant?.categorySlugs ?? [],
+                          countryCodes: existing.countryCodes,
+                          requestedBy: "operator",
+                        });
+                      }
+                      response = json({
+                        offer: await dependencies.repositories.getOffer(internalOfferId),
+                        materialization: buildMaterializationMetadata(materialization),
+                      });
                     } else {
           const categoryCountriesIndexMatch = normalizedPath.match(/^\/([^/]+)\/countries$/);
           if (categoryCountriesIndexMatch && isMethod(request, "GET")) {
@@ -945,21 +1040,30 @@ export function createApp(dependencies: AppDependencies) {
                         note: payload.claim.note
                       });
 
+                      let materialization: ReturnType<typeof buildMaterializationMetadata> | undefined;
                       if (payload.materialize) {
-                        await materializeMerchantArtifacts(
-                          dependencies.artifacts,
-                          dependencies.repositories,
-                          payload.merchant.slug,
-                          dependencies.now(),
-                          previousMerchant
-                        );
+                        const currentMerchant = await dependencies.repositories.getMerchant(payload.merchant.slug);
+                        const queued = await queueMerchantMaterialization(dependencies, {
+                          merchantSlug: payload.merchant.slug,
+                          categorySlugs: new Set([
+                            ...(previousMerchant?.categorySlugs ?? []),
+                            ...(currentMerchant?.categorySlugs ?? []),
+                          ]),
+                          countryCodes: new Set([
+                            ...(previousMerchant?.countryCodes ?? []),
+                            ...(currentMerchant?.countryCodes ?? []),
+                          ]),
+                          requestedBy: payload.reviewedBy ?? "dashboard-import",
+                        });
+                        materialization = buildMaterializationMetadata(queued);
                       }
 
                       response = json({
                         ok: true,
                         merchant_slug: payload.merchant.slug,
                         claim_id: payload.claim.claimId,
-                        materialized: payload.materialize
+                        materialized: false,
+                        materialization,
                       });
                     } else if (normalizedPath === "/internal/metrics/materialize" && isMethod(request, "POST")) {
                       requireOperatorAccess(request, dependencies.operatorToken);
@@ -1851,11 +1955,12 @@ async function parseRegisterRequest(request: Request): Promise<RegisterClawInput
   };
 }
 
-export function createProductionApp(env: Env) {
+export function createProductionApp(env: Env, materializationScheduler: MaterializationScheduler) {
   return createApp({
     artifacts: new R2ArtifactStore(env.ARTIFACTS),
     repositories: new D1Repositories(env.DB),
     config: readDeployConfig(env),
+    materializationScheduler,
     metrics: env.METRICS,
     staticAssets: env.ASSETS,
     operatorToken: env.OPERATOR_TOKEN,

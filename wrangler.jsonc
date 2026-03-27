@@ -33,5 +33,12 @@
       "binding": "ARTIFACTS",
       "bucket_name": "${LOBSTERBAZAAR_ARTIFACTS_BUCKET}"
     }
+  ],
+  "workflows": [
+    {
+      "name": "${LOBSTERBAZAAR_WORKFLOW_NAME}",
+      "binding": "MATERIALIZATION_WORKFLOW",
+      "class_name": "LobsterbazaarMaterializationWorkflow"
+    }
   ]
 }

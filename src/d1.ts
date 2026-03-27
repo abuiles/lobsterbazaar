@@ -25,6 +25,10 @@ import {
 import type {
   CreateCategoryInput,
   CreateClaimInput,
+  MaterializationTarget,
+  MaterializationTargetDirtyInput,
+  MaterializationTargetListFilters,
+  MaterializationTargetType,
   CreateMerchantInput,
   CreateOfferInput,
   Repositories
@@ -102,12 +106,48 @@ interface ClaimStatusRow {
   status: string;
 }
 
+interface MaterializationTargetRow {
+  target_type: string;
+  target_key: string;
+  desired_generation: number | string;
+  processed_generation: number | string;
+  status: string;
+  first_dirty_at: string | null;
+  last_dirty_at: string | null;
+  last_started_at: string | null;
+  last_completed_at: string | null;
+  last_error: string | null;
+  requested_by: string | null;
+  workflow_instance_id: string | null;
+  affected_category_slugs_json: string;
+  affected_country_codes_json: string;
+}
+
 function parseJson<T>(value: string): T {
   return JSON.parse(value) as T;
 }
 
 function parseBoolean(value: number | string): boolean {
   return Number(value) === 1;
+}
+
+function mapMaterializationTarget(row: MaterializationTargetRow): MaterializationTarget {
+  return {
+    targetType: row.target_type as MaterializationTargetType,
+    targetKey: row.target_key,
+    desiredGeneration: Number(row.desired_generation),
+    processedGeneration: Number(row.processed_generation),
+    status: row.status as MaterializationTarget["status"],
+    firstDirtyAt: row.first_dirty_at,
+    lastDirtyAt: row.last_dirty_at,
+    lastStartedAt: row.last_started_at,
+    lastCompletedAt: row.last_completed_at,
+    lastError: row.last_error,
+    requestedBy: row.requested_by,
+    workflowInstanceId: row.workflow_instance_id,
+    affectedCategorySlugs: parseJson<string[]>(row.affected_category_slugs_json),
+    affectedCountryCodes: parseJson<string[]>(row.affected_country_codes_json),
+  };
 }
 
 function mapMerchant(row: MerchantRow, countryCodes: string[], categorySlugs: string[]): Merchant {
@@ -689,6 +729,46 @@ export class D1Repositories implements Repositories {
     }));
   }
 
+  async getMerchantArtifactForCategory(merchantSlug: string, categorySlug: string, now: string): Promise<MerchantArtifact | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT *
+         FROM merchants
+         WHERE slug = ?1
+           AND is_published = 1
+           AND EXISTS (
+             SELECT 1
+             FROM merchant_categories
+             WHERE merchant_slug = merchants.slug
+               AND category_slug = ?2
+           )`
+      )
+      .bind(merchantSlug, categorySlug)
+      .first<MerchantRow>();
+
+    if (!row) {
+      return null;
+    }
+
+    const [countryCodes, categorySlugs, activeOffersCount] = await Promise.all([
+      this.listCountryCodesForMerchant(row.slug),
+      this.listCategorySlugsForMerchant(row.slug),
+      this.countActiveOffersForMerchantByCategory(row.slug, categorySlug, now)
+    ]);
+
+    return {
+      slug: row.slug,
+      displayName: row.display_name,
+      storeUrl: row.store_url,
+      countryCodes,
+      categorySlugs,
+      notes: row.notes,
+      storefrontMcpUrl: deriveStorefrontMcpUrl(mapMerchant(row, countryCodes, categorySlugs)),
+      claimStatus: row.claim_status as Merchant["claimStatus"],
+      activeOffersCount,
+    };
+  }
+
   async listMerchantArtifacts(now: string, since?: string): Promise<MerchantArtifact[]> {
     const merchantsQuery = since
       ? `SELECT * FROM merchants WHERE created_at > ? AND is_published = 1 ORDER BY slug ASC`
@@ -888,6 +968,230 @@ export class D1Repositories implements Repositories {
       claimedMerchantCount: Number(claimedMerchantCountRow?.total ?? 0),
       countryCount: Number(countryCountRow?.total ?? 0)
     };
+  }
+
+  async getMaterializationTarget(targetType: MaterializationTargetType, targetKey: string): Promise<MaterializationTarget | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT
+           target_type,
+           target_key,
+           desired_generation,
+           processed_generation,
+           status,
+           first_dirty_at,
+           last_dirty_at,
+           last_started_at,
+           last_completed_at,
+           last_error,
+           requested_by,
+           workflow_instance_id,
+           affected_category_slugs_json,
+           affected_country_codes_json
+         FROM materialization_targets
+         WHERE target_type = ?1 AND target_key = ?2`
+      )
+      .bind(targetType, targetKey)
+      .first<MaterializationTargetRow>();
+
+    return row ? mapMaterializationTarget(row) : null;
+  }
+
+  async listMaterializationTargets(filters: MaterializationTargetListFilters = {}): Promise<MaterializationTarget[]> {
+    const conditions: string[] = [];
+    const bindings: unknown[] = [];
+
+    if (filters.targetType) {
+      conditions.push(`target_type = ?${bindings.length + 1}`);
+      bindings.push(filters.targetType);
+    }
+
+    if (filters.targetKey) {
+      conditions.push(`target_key = ?${bindings.length + 1}`);
+      bindings.push(filters.targetKey);
+    }
+
+    if (filters.status) {
+      conditions.push(`status = ?${bindings.length + 1}`);
+      bindings.push(filters.status);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const query = `SELECT
+      target_type,
+      target_key,
+      desired_generation,
+      processed_generation,
+      status,
+      first_dirty_at,
+      last_dirty_at,
+      last_started_at,
+      last_completed_at,
+      last_error,
+      requested_by,
+      workflow_instance_id,
+      affected_category_slugs_json,
+      affected_country_codes_json
+    FROM materialization_targets
+    ${whereClause}
+    ORDER BY target_type ASC, target_key ASC`;
+    const result = bindings.length > 0
+      ? await this.db.prepare(query).bind(...bindings).all<MaterializationTargetRow>()
+      : await this.db.prepare(query).all<MaterializationTargetRow>();
+
+    return (result.results ?? []).map(mapMaterializationTarget);
+  }
+
+  async markMaterializationTargetDirty(input: MaterializationTargetDirtyInput): Promise<MaterializationTarget> {
+    await this.db
+      .prepare(
+        `INSERT INTO materialization_targets
+           (target_type, target_key, desired_generation, processed_generation, status, first_dirty_at, last_dirty_at, last_started_at, last_completed_at, last_error, requested_by, workflow_instance_id, affected_category_slugs_json, affected_country_codes_json)
+         VALUES (?1, ?2, 1, 0, 'debouncing', ?3, ?3, NULL, NULL, NULL, ?4, ?5, ?6, ?7)
+         ON CONFLICT(target_type, target_key) DO UPDATE SET
+           desired_generation = materialization_targets.desired_generation + 1,
+           status = CASE
+             WHEN materialization_targets.status = 'running' THEN 'running'
+             ELSE 'debouncing'
+           END,
+           first_dirty_at = COALESCE(materialization_targets.first_dirty_at, excluded.first_dirty_at),
+           last_dirty_at = excluded.last_dirty_at,
+           last_error = CASE
+             WHEN materialization_targets.status = 'failed' THEN materialization_targets.last_error
+             ELSE NULL
+           END,
+           requested_by = COALESCE(excluded.requested_by, materialization_targets.requested_by),
+           workflow_instance_id = CASE
+             WHEN materialization_targets.status IN ('running', 'debouncing') THEN materialization_targets.workflow_instance_id
+             ELSE COALESCE(excluded.workflow_instance_id, materialization_targets.workflow_instance_id)
+           END,
+           affected_category_slugs_json = COALESCE((
+             SELECT json_group_array(value)
+             FROM (
+               SELECT DISTINCT value
+               FROM json_each(materialization_targets.affected_category_slugs_json)
+               UNION
+               SELECT DISTINCT value
+               FROM json_each(excluded.affected_category_slugs_json)
+               ORDER BY value
+             )
+           ), '[]'),
+           affected_country_codes_json = COALESCE((
+             SELECT json_group_array(value)
+             FROM (
+               SELECT DISTINCT value
+               FROM json_each(materialization_targets.affected_country_codes_json)
+               UNION
+               SELECT DISTINCT value
+               FROM json_each(excluded.affected_country_codes_json)
+               ORDER BY value
+             )
+           ), '[]')`
+      )
+      .bind(
+        input.targetType,
+        input.targetKey,
+        input.now,
+        input.requestedBy ?? null,
+        input.workflowInstanceId ?? null,
+        JSON.stringify(Array.from(new Set((input.affectedCategorySlugs ?? []).map((value) => value.trim()).filter(Boolean))).sort()),
+        JSON.stringify(Array.from(new Set((input.affectedCountryCodes ?? []).map((value) => normalizeCountryCode(value)).filter(Boolean))).sort())
+      )
+      .run();
+
+    const target = await this.getMaterializationTarget(input.targetType, input.targetKey);
+    if (!target) {
+      throw new Error("Materialization target not found after dirty update.");
+    }
+
+    return target;
+  }
+
+  async markMaterializationTargetRunning(
+    targetType: MaterializationTargetType,
+    targetKey: string,
+    now: string,
+  ): Promise<MaterializationTarget | null> {
+    await this.db
+      .prepare(
+        `UPDATE materialization_targets
+         SET status = 'running',
+             last_started_at = ?3,
+             last_error = NULL
+         WHERE target_type = ?1 AND target_key = ?2`
+      )
+      .bind(targetType, targetKey, now)
+      .run();
+
+    return this.getMaterializationTarget(targetType, targetKey);
+  }
+
+  async markMaterializationTargetReady(
+    targetType: MaterializationTargetType,
+    targetKey: string,
+    processedGeneration: number,
+    now: string,
+  ): Promise<MaterializationTarget | null> {
+    await this.db
+      .prepare(
+        `UPDATE materialization_targets
+         SET processed_generation = CASE
+               WHEN processed_generation > ?3 THEN processed_generation
+               ELSE ?3
+             END,
+             status = CASE
+               WHEN desired_generation <= ?3 THEN 'ready'
+               ELSE 'debouncing'
+             END,
+             first_dirty_at = CASE
+               WHEN desired_generation <= ?3 THEN NULL
+               ELSE first_dirty_at
+             END,
+             last_dirty_at = CASE
+               WHEN desired_generation <= ?3 THEN NULL
+               ELSE last_dirty_at
+             END,
+             last_completed_at = ?4,
+             last_error = NULL,
+             workflow_instance_id = CASE
+               WHEN desired_generation <= ?3 THEN NULL
+               ELSE workflow_instance_id
+             END,
+             affected_category_slugs_json = CASE
+               WHEN desired_generation <= ?3 THEN '[]'
+               ELSE affected_category_slugs_json
+             END,
+             affected_country_codes_json = CASE
+               WHEN desired_generation <= ?3 THEN '[]'
+               ELSE affected_country_codes_json
+             END
+         WHERE target_type = ?1 AND target_key = ?2`
+      )
+      .bind(targetType, targetKey, processedGeneration, now)
+      .run();
+
+    return this.getMaterializationTarget(targetType, targetKey);
+  }
+
+  async markMaterializationTargetFailed(
+    targetType: MaterializationTargetType,
+    targetKey: string,
+    errorMessage: string,
+    now: string,
+  ): Promise<MaterializationTarget | null> {
+    await this.db
+      .prepare(
+        `UPDATE materialization_targets
+         SET status = 'failed',
+             last_completed_at = ?4,
+             last_error = ?3,
+             workflow_instance_id = NULL
+         WHERE target_type = ?1 AND target_key = ?2`
+      )
+      .bind(targetType, targetKey, errorMessage, now)
+      .run();
+
+    return this.getMaterializationTarget(targetType, targetKey);
   }
 
   async putCategory(input: CreateCategoryInput): Promise<void> {

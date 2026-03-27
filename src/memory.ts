@@ -31,6 +31,10 @@ import type {
   ArtifactStore,
   CreateCategoryInput,
   CreateClaimInput,
+  MaterializationTarget,
+  MaterializationTargetDirtyInput,
+  MaterializationTargetListFilters,
+  MaterializationTargetType,
   CreateMerchantInput,
   CreateOfferInput,
   Repositories
@@ -129,6 +133,7 @@ export class MemoryRepositories implements Repositories {
   private readonly offers = new Map<string, Offer>();
   private readonly claims = new Map<string, MerchantClaim>();
   private readonly claws = new Map<string, Claw>();
+  private readonly materializationTargets = new Map<string, MaterializationTarget>();
 
   private isCategoryPublished(category: Category | undefined): boolean {
     return category?.isPublished !== false;
@@ -136,6 +141,10 @@ export class MemoryRepositories implements Repositories {
 
   private isMerchantPublished(merchant: Merchant | undefined): boolean {
     return merchant?.isPublished !== false;
+  }
+
+  private mergeStringValues(left: string[] | undefined, right: string[] | undefined, normalize: (value: string) => string = (value) => value): string[] {
+    return Array.from(new Set([...(left ?? []), ...(right ?? [])].map((value) => normalize(value.trim())).filter(Boolean))).sort();
   }
 
   async createClaw(input: RegisterClawInput, deployId: string): Promise<RegisterClawResult> {
@@ -399,6 +408,26 @@ export class MemoryRepositories implements Repositories {
       }));
   }
 
+  async getMerchantArtifactForCategory(merchantSlug: string, categorySlug: string, now: string): Promise<MerchantArtifact | null> {
+    const merchant = this.merchants.get(merchantSlug);
+    if (!merchant || !this.isMerchantPublished(merchant) || !merchant.categorySlugs.includes(categorySlug.trim())) {
+      return null;
+    }
+
+    const activeCounts = await this.listActiveOfferCountsForCategory(categorySlug.trim(), undefined, now);
+    return {
+      slug: merchant.slug,
+      displayName: merchant.displayName,
+      storeUrl: merchant.storeUrl,
+      countryCodes: merchant.countryCodes,
+      categorySlugs: merchant.categorySlugs,
+      notes: merchant.notes,
+      storefrontMcpUrl: deriveStorefrontMcpUrl(merchant),
+      claimStatus: merchant.claimStatus,
+      activeOffersCount: activeCounts.get(merchant.slug) ?? 0,
+    };
+  }
+
   async listMerchantArtifacts(now: string, since?: string): Promise<MerchantArtifact[]> {
     const merchants = Array.from(this.merchants.values());
     const sourceMerchants = since
@@ -518,6 +547,139 @@ export class MemoryRepositories implements Repositories {
       claimedMerchantCount: publishedMerchants.filter((merchant) => merchant.claimStatus === "claimed").length,
       countryCount: new Set(publishedMerchants.flatMap((merchant) => merchant.countryCodes)).size
     };
+  }
+
+  async getMaterializationTarget(targetType: MaterializationTargetType, targetKey: string): Promise<MaterializationTarget | null> {
+    return this.materializationTargets.get(`${targetType}:${targetKey}`) ?? null;
+  }
+
+  async listMaterializationTargets(filters: MaterializationTargetListFilters = {}): Promise<MaterializationTarget[]> {
+    return Array.from(this.materializationTargets.values())
+      .filter((target) => !filters.targetType || target.targetType === filters.targetType)
+      .filter((target) => !filters.targetKey || target.targetKey === filters.targetKey)
+      .filter((target) => !filters.status || target.status === filters.status)
+      .sort((left, right) =>
+        `${left.targetType}:${left.targetKey}`.localeCompare(`${right.targetType}:${right.targetKey}`),
+      );
+  }
+
+  async markMaterializationTargetDirty(input: MaterializationTargetDirtyInput): Promise<MaterializationTarget> {
+    const key = `${input.targetType}:${input.targetKey}`;
+    const existing = this.materializationTargets.get(key);
+    const next: MaterializationTarget = existing
+      ? {
+          ...existing,
+          desiredGeneration: existing.desiredGeneration + 1,
+          status: existing.status === "running" ? "running" : "debouncing",
+          firstDirtyAt: existing.firstDirtyAt ?? input.now,
+          lastDirtyAt: input.now,
+          lastError: existing.status === "failed" ? existing.lastError : null,
+          requestedBy: input.requestedBy ?? existing.requestedBy,
+          workflowInstanceId: (existing.status === "running" || existing.status === "debouncing")
+            ? existing.workflowInstanceId
+            : (input.workflowInstanceId ?? existing.workflowInstanceId),
+          affectedCategorySlugs: this.mergeStringValues(existing.affectedCategorySlugs, input.affectedCategorySlugs),
+          affectedCountryCodes: this.mergeStringValues(
+            existing.affectedCountryCodes,
+            input.affectedCountryCodes,
+            normalizeCountryCode,
+          ),
+        }
+      : {
+          targetType: input.targetType,
+          targetKey: input.targetKey,
+          desiredGeneration: 1,
+          processedGeneration: 0,
+          status: "debouncing",
+          firstDirtyAt: input.now,
+          lastDirtyAt: input.now,
+          lastStartedAt: null,
+          lastCompletedAt: null,
+          lastError: null,
+          requestedBy: input.requestedBy ?? null,
+          workflowInstanceId: input.workflowInstanceId ?? null,
+          affectedCategorySlugs: this.mergeStringValues(input.affectedCategorySlugs, undefined),
+          affectedCountryCodes: this.mergeStringValues(input.affectedCountryCodes, undefined, normalizeCountryCode),
+        };
+
+    this.materializationTargets.set(key, next);
+    return next;
+  }
+
+  async markMaterializationTargetRunning(
+    targetType: MaterializationTargetType,
+    targetKey: string,
+    now: string,
+  ): Promise<MaterializationTarget | null> {
+    const key = `${targetType}:${targetKey}`;
+    const existing = this.materializationTargets.get(key);
+    if (!existing) {
+      return null;
+    }
+
+    const next = {
+      ...existing,
+      status: "running" as const,
+      lastStartedAt: now,
+      lastError: null,
+    };
+    this.materializationTargets.set(key, next);
+    return next;
+  }
+
+  async markMaterializationTargetReady(
+    targetType: MaterializationTargetType,
+    targetKey: string,
+    processedGeneration: number,
+    now: string,
+  ): Promise<MaterializationTarget | null> {
+    const key = `${targetType}:${targetKey}`;
+    const existing = this.materializationTargets.get(key);
+    if (!existing) {
+      return null;
+    }
+
+    const nextProcessedGeneration = Math.max(existing.processedGeneration, processedGeneration);
+    const isReady = nextProcessedGeneration >= existing.desiredGeneration;
+    const next = {
+      ...existing,
+      processedGeneration: nextProcessedGeneration,
+      status: isReady ? ("ready" as const) : ("debouncing" as const),
+      firstDirtyAt: isReady ? null : existing.firstDirtyAt,
+      lastDirtyAt: isReady ? null : existing.lastDirtyAt,
+      lastCompletedAt: now,
+      lastError: null,
+      workflowInstanceId: isReady ? null : existing.workflowInstanceId,
+      affectedCategorySlugs: isReady ? [] : existing.affectedCategorySlugs,
+      affectedCountryCodes: isReady ? [] : existing.affectedCountryCodes,
+    };
+
+    this.materializationTargets.set(key, next);
+    return next;
+  }
+
+  async markMaterializationTargetFailed(
+    targetType: MaterializationTargetType,
+    targetKey: string,
+    errorMessage: string,
+    now: string,
+  ): Promise<MaterializationTarget | null> {
+    const key = `${targetType}:${targetKey}`;
+    const existing = this.materializationTargets.get(key);
+    if (!existing) {
+      return null;
+    }
+
+    const next = {
+      ...existing,
+      status: "failed" as const,
+      lastCompletedAt: now,
+      lastError: errorMessage,
+      workflowInstanceId: null,
+    };
+
+    this.materializationTargets.set(key, next);
+    return next;
   }
 
   async putCategory(input: CreateCategoryInput): Promise<void> {

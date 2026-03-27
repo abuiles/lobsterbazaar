@@ -59,6 +59,42 @@ export interface CreateClaimInput extends Omit<MerchantClaim, "createdAt" | "upd
   updatedAt?: string;
 }
 
+export type MaterializationTargetType = "merchant" | "directory";
+export type MaterializationTargetStatus = "dirty" | "debouncing" | "running" | "ready" | "failed";
+
+export interface MaterializationTarget {
+  targetType: MaterializationTargetType;
+  targetKey: string;
+  desiredGeneration: number;
+  processedGeneration: number;
+  status: MaterializationTargetStatus;
+  firstDirtyAt: string | null;
+  lastDirtyAt: string | null;
+  lastStartedAt: string | null;
+  lastCompletedAt: string | null;
+  lastError: string | null;
+  requestedBy: string | null;
+  workflowInstanceId: string | null;
+  affectedCategorySlugs: string[];
+  affectedCountryCodes: string[];
+}
+
+export interface MaterializationTargetListFilters {
+  targetType?: MaterializationTargetType;
+  targetKey?: string;
+  status?: MaterializationTargetStatus;
+}
+
+export interface MaterializationTargetDirtyInput {
+  targetType: MaterializationTargetType;
+  targetKey: string;
+  requestedBy?: string | null;
+  workflowInstanceId?: string | null;
+  affectedCategorySlugs?: string[];
+  affectedCountryCodes?: string[];
+  now: string;
+}
+
 export interface Repositories {
   createClaw(input: RegisterClawInput, deployId: string): Promise<RegisterClawResult>;
   getCategory(slug: string): Promise<Category | null>;
@@ -76,6 +112,7 @@ export interface Repositories {
   listActiveOffers(countryCode: string, now: string): Promise<PublicOffer[]>;
   listActiveOffersForCategory(categorySlug: string, countryCode: string, now: string): Promise<PublicOffer[]>;
   listActiveOffersForMerchant(merchantSlug: string, now: string): Promise<PublicOffer[]>;
+  getMerchantArtifactForCategory(merchantSlug: string, categorySlug: string, now: string): Promise<MerchantArtifact | null>;
   listMerchantArtifacts(now: string, since?: string): Promise<MerchantArtifact[]>;
   listMerchantArtifactsForCategory(categorySlug: string, now: string, since?: string): Promise<MerchantArtifact[]>;
   listCountryCodes(): Promise<string[]>;
@@ -87,6 +124,26 @@ export interface Repositories {
   listOfferMerchantSlugsForAddedSince(since: string): Promise<string[]>;
   listOfferCountryCodesForAddedSince(since: string): Promise<string[]>;
   getMetricsSnapshot(now: string): Promise<MetricsSnapshot>;
+  getMaterializationTarget(targetType: MaterializationTargetType, targetKey: string): Promise<MaterializationTarget | null>;
+  listMaterializationTargets(filters?: MaterializationTargetListFilters): Promise<MaterializationTarget[]>;
+  markMaterializationTargetDirty(input: MaterializationTargetDirtyInput): Promise<MaterializationTarget>;
+  markMaterializationTargetRunning(
+    targetType: MaterializationTargetType,
+    targetKey: string,
+    now: string,
+  ): Promise<MaterializationTarget | null>;
+  markMaterializationTargetReady(
+    targetType: MaterializationTargetType,
+    targetKey: string,
+    processedGeneration: number,
+    now: string,
+  ): Promise<MaterializationTarget | null>;
+  markMaterializationTargetFailed(
+    targetType: MaterializationTargetType,
+    targetKey: string,
+    errorMessage: string,
+    now: string,
+  ): Promise<MaterializationTarget | null>;
   putCategory(input: CreateCategoryInput): Promise<void>;
   putMerchant(input: CreateMerchantInput): Promise<void>;
   putOffer(input: CreateOfferInput): Promise<void>;
